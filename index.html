@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ASIC Network Docs</title>
-<meta name="description" content="Open documentation from the ASIC Network, rendered straight from markdown.">
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='5' y='5' width='22' height='22' rx='5' fill='%2303418a'/%3E%3Crect x='11' y='11' width='10' height='10' rx='2' fill='white'/%3E%3C/svg%3E">
+<title>Stone Arch Silicon Docs</title>
+<meta name="description" content="ASIC 101 — the in-house chip design course from Stone Arch Silicon at the University of Minnesota, rendered straight from markdown.">
+<meta name="theme-color" content="#100A0C">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%237A0019'/%3E%3Crect x='12' y='5' width='8' height='7' rx='1.5' fill='%23FFCC33'/%3E%3Cpath d='M3 16h26M5 27v-6a3.5 3.5 0 0 1 7 0v6M12 27v-6a3.5 3.5 0 0 1 7 0v6M19 27v-6a3.5 3.5 0 0 1 7 0v6' stroke='%23FFCC33' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Karla:wght@400;500;600;700&family=Zilla+Slab:wght@500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,20 +17,20 @@
 <header class="nav">
   <div class="row">
     <a class="brand" id="nav-home" href="#">
-      <svg class="chip" width="30" height="30" viewBox="0 0 32 32" aria-hidden="true">
-        <g class="pins">
-          <path d="M10 5V2M16 5V2M22 5V2M10 27v3M16 27v3M22 27v3M5 10H2M5 16H2M5 22H2M27 10h3M27 16h3M27 22h3"/>
-        </g>
-        <rect class="body" x="5" y="5" width="22" height="22" rx="4"/>
-        <rect class="core" x="11" y="11" width="10" height="10" rx="2"/>
+      <svg class="chip" width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+        <rect class="die" x="10" y="4" width="12" height="10" rx="2"/>
+        <rect class="core" x="14" y="7" width="4" height="4" rx="1"/>
+        <path class="pins" d="M13 14v3M16 14v3M19 14v3"/>
+        <path class="deck" d="M2 17h28"/>
+        <path class="arch" d="M5 29v-7a3.5 3.5 0 0 1 7 0v7M12 29v-7a3.5 3.5 0 0 1 7 0v7M19 29v-7a3.5 3.5 0 0 1 7 0v7"/>
       </svg>
       <span>
-        <span class="wm">ASIC NETWORK</span>
+        <span class="wm">STONE ARCH SILICON</span>
         <span class="sub" id="brand-sub">docs</span>
       </span>
     </a>
     <nav class="links">
-      <a id="nav-main" href="#">Home</a>
+      <a id="nav-main" href="#">Club</a>
       <a id="nav-repo" href="#" target="_blank" rel="noopener">GitHub</a>
     </nav>
   </div>
@@ -37,7 +38,7 @@
 </header>
 
 <div class="toolbar">
-  <button id="drawer-btn" class="tb-btn" type="button">&#9776; Pages</button>
+  <button id="drawer-btn" class="tb-btn" type="button">&#9776; <span class="unit-word">Lessons</span></button>
   <span class="tb-title" id="tb-title">Loading&hellip;</span>
 </div>
 
@@ -45,12 +46,13 @@
 
 <div class="layout">
   <aside class="sidebar" id="sidebar">
-    <h3>Pages</h3>
+    <h3 class="unit-word">Lessons</h3>
     <nav id="page-nav">
       <div class="sk" style="width:82%"></div>
       <div class="sk" style="width:64%"></div>
       <div class="sk" style="width:74%"></div>
     </nav>
+    <p class="side-note">UMN &middot; Twin Cities<br>umnasicgroup@gmail.com</p>
   </aside>
 
   <main>
@@ -73,13 +75,13 @@
 
 <footer>
   <div class="row">
-    <span class="wm">ASIC NETWORK</span>
-    <span class="tag">// silicon is a team sport</span>
-    <a id="f-repo" href="#" target="_blank" rel="noopener">Contribute on GitHub &nearr;</a>
+    <span class="wm">STONE ARCH SILICON</span>
+    <span class="tag">// tape-out club at the university of minnesota</span>
+    <a id="f-repo" href="#" target="_blank" rel="noopener">Write a lesson on GitHub &nearr;</a>
   </div>
 </footer>
 
-<noscript><div style="max-width:700px;margin:30px auto;padding:0 24px;font-family:monospace">This site renders markdown client-side and needs JavaScript enabled.</div></noscript>
+<noscript><div style="max-width:700px;margin:30px auto;padding:0 24px;font-family:monospace;color:#D9CBCE">These lessons are rendered from markdown in the browser, so JavaScript has to be on. You can also read them directly in the GitHub repo.</div></noscript>
 
 <script src="app.js"></script>
 </body>
