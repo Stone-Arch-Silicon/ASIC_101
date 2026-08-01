@@ -1,22 +1,47 @@
-# Welcome to the analog-tutorials wiki! 
-This wiki covers getting started with open-source analog IC design tools. The basic flow is [xschem](https://xschem.sourceforge.io/) for schematic capture, simulation, and SPICE netlist generation, then [KLayout](https://www.klayout.de/) for layout.
+# What an ASIC is, and what we're building
 
-Start by setting up the [IIC-OSIC-TOOLS](https://github.com/iic-jku/iic-osic-tools) container, following the [Setting Up Open Source Tools with Docker](https://kwantaekim.github.io/2024/05/25/OSE-Docker/) tutorial.
+> Drop this file in as `Pages/page_1.md` to see the theme with real content. Replace it with the actual lesson.
 
-### Pages
-Once your environment is set up, work through the following examples, taking each block from schematic to layout:
-1. [Inverter](https://asic-network.github.io/analog-tutorials/#page_2)
-2. [Ring oscillator](https://asic-network.github.io/analog-tutorials/#page_3)
+An **ASIC** — application-specific integrated circuit — is a chip built to do one job, with the logic frozen into the silicon at manufacturing time. That's the trade: an FPGA can be reprogrammed after it ships, an ASIC can't, and in exchange the ASIC is smaller, faster, and far cheaper per unit at volume.
 
-### Literature recommendations
-* [Practical Electronics for Inventors](http://instrumentacion.qi.fcen.uba.ar/libro/Scherz.pdf) by Paul Scherz
-* Fundamentals of Microelectronics by Behzad Razavi
-* CMOS VLSI Design, A Circuits and Systems Perspective by Neil H. E. Weste and David Money Harris
-* [Open Circuits: The Inner Beauty of Electronic Components](https://archive.org/details/open-circuits) by Windell Oskay 
-* [AIC2023](https://analogicus.com/aic2023/) — and other years (e.g. AIC2026) — teaches core analog IC concepts while building circuits on the SKY130 PDK
+ASIC 101 walks the whole path once, end to end, on a design small enough to finish: RTL, simulation, synthesis, place and route, and a GDS file that could actually be taped out.
 
-### Associated
-- [Terminology](https://zerotoasiccourse.com/terminology/) overview
-- Learn Linux with [Bandit](https://overthewire.org/wargames/bandit/)
-- Test Verilog and Digital Logic with [EDA Playground](https://edaplayground.com/x/KjwN)
-- [Awesome open source ASIC resources](https://github.com/mattvenn/awesome-opensource-asic-resources)
+## What you need before lesson 2
+
+- A Linux shell you're comfortable in (WSL is fine)
+- Git, and a GitHub account for turning in work
+- Verilog at the level of EE 2301 — modules, always blocks, testbenches
+
+## The flow, in order
+
+| Stage | You write | The tool produces |
+| --- | --- | --- |
+| RTL | Verilog | — |
+| Simulation | Testbench | Waveforms |
+| Synthesis | Constraints | Gate-level netlist |
+| Place & route | Floorplan | GDSII layout |
+
+## A first module
+
+```verilog
+module blink #(parameter N = 24) (
+  input  wire clk,
+  input  wire rst_n,
+  output wire led
+);
+  reg [N-1:0] count;
+  always @(posedge clk or negedge rst_n)
+    if (!rst_n) count <= 0;
+    else        count <= count + 1'b1;
+
+  assign led = count[N-1];
+endmodule
+```
+
+Nothing here is ASIC-specific yet — that's the point. The RTL is the same; everything downstream of it changes.
+
+## Checklist
+
+- [x] Read this page
+- [ ] Install the toolchain
+- [ ] Simulate `blink` and screenshot the waveform
