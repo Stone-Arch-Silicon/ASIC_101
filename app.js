@@ -2,12 +2,15 @@
    CONFIG: edit these two strings per repo, nothing else
    ========================================================= */
 const CONFIG = {
-  title: "Analog Tutorials",                                     // EDIT: "Analog Tutorials" / "Digital Tutorials"
-  repo:  "https://github.com/ASIC-Network/analog-tutorials",     // EDIT: this repo's github url
-  mainSite: "https://asicnetwork.net",
+  title: "ASIC 101",                                           // EDIT: name of this course / tutorial track
+  repo:  "https://github.com/UMN-ASIC-CLUB/asic-101",          // EDIT: this repo's github url
+  mainSite: "https://umn-asic-club.github.io",                 // EDIT: the SASi site url
+  org:   "Stone Arch Silicon",
+  orgMark: "STONE ARCH SILICON",
   branch: "main",
   pagesDir: "Pages",
-  maxPages: 60
+  maxPages: 60,
+  unitWord: "Lesson"                                           // shown in the sidebar + page meta
 };
 
 /* ---------- dom refs + boilerplate ---------- */
@@ -16,8 +19,10 @@ const content = $id("content"), pageNav = $id("page-nav"), pager = $id("pager"),
       metaEl = $id("doc-meta"), tocNav = $id("toc-nav"), tocBox = $id("toc"),
       tbTitle = $id("tb-title");
 
-document.title = CONFIG.title + " \u00b7 ASIC Network";
+document.title = CONFIG.title + " \u00b7 " + CONFIG.org;
 $id("brand-sub").textContent = CONFIG.title;
+document.querySelectorAll(".wm").forEach(el => { el.textContent = CONFIG.orgMark; });
+document.querySelectorAll(".unit-word").forEach(el => { el.textContent = CONFIG.unitWord + "s"; });
 $id("nav-home").href = CONFIG.mainSite;
 $id("nav-main").href = CONFIG.mainSite;
 $id("nav-repo").href = CONFIG.repo;
@@ -297,7 +302,7 @@ function renderPage(k){
   document.title = p.title + " \u00b7 " + CONFIG.title;
   tbTitle.textContent = p.title;
   metaEl.style.display = "";
-  metaEl.innerHTML = '<span class="pgno">Page ' + pad(p.n) + " / " + pad(PAGES[PAGES.length - 1].n) + "</span>"
+  metaEl.innerHTML = '<span class="pgno">' + CONFIG.unitWord + " " + pad(p.n) + " / " + pad(PAGES[PAGES.length - 1].n) + "</span>"
     + '<a class="edit" target="_blank" rel="noopener" href="' + CONFIG.repo + "/edit/" + CONFIG.branch + "/" + PDIR + "page_" + p.n + '.md">edit this page on github &nearr;</a>';
   renderNav(k); renderPager(k); buildToc(); bindCopy();
   try { window.scrollTo(0, 0); } catch (e) {}
@@ -307,9 +312,9 @@ function renderEmpty(){
   pageNav.innerHTML = "";
   metaEl.style.display = "none";
   tocBox.style.display = "none";
-  tbTitle.textContent = "No pages";
-  content.innerHTML = '<div class="state-card"><h2>No pages found</h2>'
-    + "<p>This site renders <code>Pages/page_1.md</code>, <code>Pages/page_2.md</code>, &hellip; Add <code>Pages/page_1.md</code> (copy <code>Pages/TEMPLATE.md</code>) and reload. Numbering must be sequential with no gaps.</p>"
+  tbTitle.textContent = "No lessons yet";
+  content.innerHTML = '<div class="state-card"><h2>Start the first lesson</h2>'
+    + "<p>This site builds itself from <code>Pages/page_1.md</code>, <code>Pages/page_2.md</code>, &hellip; Copy <code>Pages/TEMPLATE.md</code> to <code>Pages/page_1.md</code>, write the lesson, and reload. Numbering has to run in sequence with no gaps.</p>"
     + (isFile ? "<p>You opened this file directly. <code>fetch()</code> needs a server: run <code>python3 -m http.server</code> in this folder and open <code>http://localhost:8000</code>.</p>" : "")
     + "</div>";
 }
