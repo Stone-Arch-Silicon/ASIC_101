@@ -282,4 +282,4 @@ The next ASIC-specific step is to take verified RTL into a standard-cell physica
 
 ---
 
-*PS: Anything past this page is not a required deliverable. However, it dosen't mean it's redundant, rather it can be used by new members for reference*
+*Questions? Ask in the network Discord.*
