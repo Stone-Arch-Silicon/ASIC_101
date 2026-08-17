@@ -11,7 +11,7 @@ Your ALU accepts two 8-bit operands and a 3-bit operation code.
 | `000` | ADD | `a + b` |
 | `001` | SUB | `a - b` |
 | `010` | AND | `a & b` |
-| `011` | OR | `a | b` |
+| `011` | OR | `a \| b` |
 | `100` | XOR | `a ^ b` |
 | `101` | NOT | `~a` |
 | `110` | Shift left | `a << 1` |
