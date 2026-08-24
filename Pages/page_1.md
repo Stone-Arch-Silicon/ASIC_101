@@ -1,7 +1,5 @@
 # What an ASIC is, and what we're building
 
-> Drop this file in as `Pages/page_1.md` to see the theme with real content. Replace it with the actual lesson.
-
 An **ASIC** — application-specific integrated circuit — is a chip built to do one job, with the logic frozen into the silicon at manufacturing time. That's the trade: an FPGA can be reprogrammed after it ships, an ASIC can't, and in exchange the ASIC is smaller, faster, and far cheaper per unit at volume.
 
 ASIC 101 walks the whole path once, end to end, on a design small enough to finish: RTL, simulation, synthesis, place and route, and a GDS file that could actually be taped out.
