@@ -3,8 +3,8 @@
    ========================================================= */
 const CONFIG = {
   title: "ASIC 101",                                           // EDIT: name of this course / tutorial track
-  repo:  "https://github.com/UMN-ASIC-CLUB/asic-101",          // EDIT: this repo's github url
-  mainSite: "https://umn-asic-club.github.io",                 // EDIT: the SASi site url
+  repo: "https://github.com/Stone-Arch-Silicon/ASIC_101",
+  mainSite: "https://stone-arch-silicon.github.io/stone-arch-silicon/",
   org:   "Stone Arch Silicon",
   orgMark: "STONE ARCH SILICON",
   branch: "main",
