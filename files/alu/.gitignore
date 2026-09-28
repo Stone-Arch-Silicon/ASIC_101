@@ -1,0 +1,14 @@
+build/
+sim_build/
+results.xml
+__pycache__/
+*.vcd
+*.vvp
+coverage.json
+formal/adder8_rca/
+formal/adder8_cla/
+formal/adder8_csel/
+formal/alu_good/
+formal/alu_buggy/
+pd/runs/
+pd/config-*.json
