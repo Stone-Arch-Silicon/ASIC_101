@@ -1,0 +1,28 @@
+# Prove adder8 == a + b + cin for all 2^17 input combinations, for each adder option.
+# Run:  sby -f adder8.sby          (all three)   or   sby -f adder8.sby cla
+
+[tasks]
+rca
+cla
+csel
+
+[options]
+# No state inside an adder, so one time step covers everything.
+mode prove
+depth 1
+
+[engines]
+smtbmc z3
+
+[script]
+rca:  read -formal adder8_rca.v
+cla:  read -formal adder8_cla.v
+csel: read -formal adder8_csel.v
+read -formal adder8_props.v
+prep -top adder8_props
+
+[files]
+rca:  ../rtl/adder8_rca.v
+cla:  ../rtl/adder8_cla.v
+csel: ../rtl/adder8_csel.v
+adder8_props.v

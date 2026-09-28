@@ -1,0 +1,29 @@
+# Prove the ALU properties in alu_props.v.
+#   sby -f alu.sby good     proves the real alu_core (expect PASS)
+#   sby -f alu.sby buggy    proves alu_core_buggy.v (expect FAIL and a counterexample trace)
+
+[tasks]
+good
+buggy
+
+[options]
+# The ALU has no state, so one time step is the whole problem.
+mode prove
+depth 1
+
+[engines]
+# ABC (built into Yosys) handles bit-level problems like this ALU in under a second.
+abc pdr
+
+[script]
+read -formal adder8_rca.v
+good:  read -formal alu_core.v
+buggy: read -formal alu_core_buggy.v
+read -formal alu_props.v
+prep -top alu_props
+
+[files]
+../rtl/adder8_rca.v
+good:  ../rtl/alu_core.v
+buggy: alu_core_buggy.v
+alu_props.v
