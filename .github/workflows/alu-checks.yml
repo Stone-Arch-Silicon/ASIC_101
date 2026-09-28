@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 Stone Arch Silicon contributors
+# SPDX-License-Identifier: Apache-2.0
+#
+# Regression for the reference ALU: lint, three simulators' worth of tests,
+# formal proofs and a synthesis report, for every adder option.
+name: ALU checks
+
+on:
+  push:
+    paths: ["files/alu/**", ".github/workflows/alu-checks.yml"]
+  pull_request:
+    paths: ["files/alu/**"]
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: checks (${{ matrix.adder }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        adder: [rca, cla, csel]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install open-source tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq iverilog verilator yosys z3
+          pip install --break-system-packages cocotb
+          git clone -q --depth 1 --branch yosys-0.33 https://github.com/YosysHQ/sby /tmp/sby
+          sudo make -C /tmp/sby install PREFIX=/usr/local
+
+      - name: make check
+        working-directory: files/alu
+        run: make check ADDER=${{ matrix.adder }}
