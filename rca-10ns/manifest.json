@@ -1,0 +1,20 @@
+{
+  "01-synthesis": "06-yosys-synthesis",
+  "02-floorplan": "13-openroad-floorplan",
+  "03-tapcells": "19-openroad-tapendcapinsertion",
+  "04-pdn": "21-openroad-generatepdn",
+  "05-global-placement": "28-openroad-globalplacement",
+  "06-detailed-placement": "34-openroad-detailedplacement",
+  "07-cts": "35-openroad-cts",
+  "08-global-routing": "39-openroad-globalrouting",
+  "09-detailed-routing": "44-openroad-detailedrouting",
+  "10-fill": "52-openroad-fillinsertion",
+  "11-rcx": "54-openroad-rcx",
+  "12-sta-post-pnr": "55-openroad-stapostpnr",
+  "13-ir-drop": "56-openroad-irdropreport",
+  "14-klayout-render": "59-klayout-render",
+  "15-magic-drc": "64-magic-drc",
+  "16-klayout-drc": "65-klayout-drc",
+  "17-lvs": "70-netgen-lvs",
+  "18-manufacturability": "76-misc-reportmanufacturability"
+}

@@ -1,0 +1,2 @@
+PASS: 19999 results checked against the scoreboard.
+/home/runner/work/ASIC_101/ASIC_101/files/alu/pd/../tb/alu_top_tb.v:103: $finish called at 200016000 (1ps)

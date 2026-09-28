@@ -1,0 +1,7 @@
+
+17. Executing PROC_DLATCH pass (convert process syncs to latches).
+No latch inferred for signal `\alu_core.\y' from process `\alu_core.$proc$/home/runner/work/ASIC_101/ASIC_101/files/alu/rtl/alu_core.v:40$5'.
+No latch inferred for signal `\alu_core.\carry' from process `\alu_core.$proc$/home/runner/work/ASIC_101/ASIC_101/files/alu/rtl/alu_core.v:40$5'.
+No latch inferred for signal `\alu_core.\overflow' from process `\alu_core.$proc$/home/runner/work/ASIC_101/ASIC_101/files/alu/rtl/alu_core.v:40$5'.
+No latch inferred for signal `\alu_core.\zero' from process `\alu_core.$proc$/home/runner/work/ASIC_101/ASIC_101/files/alu/rtl/alu_core.v:40$5'.
+No latch inferred for signal `\alu_core.\negative' from process `\alu_core.$proc$/home/runner/work/ASIC_101/ASIC_101/files/alu/rtl/alu_core.v:40$5'.
