@@ -1,0 +1,12 @@
+`verilator_config
+// Waivers for lint with -Wall. Every waiver says why it is safe.
+//
+// UNOPTFLAT: the carry vector c[] has bits that depend on other bits of the same
+// vector (c[i+1] uses c[i]). That is a real ripple chain, not a combinational loop.
+// The lint tool only warns because it cannot schedule the whole vector as one
+// unit, which slows simulation slightly. Synthesis is unaffected.
+lint_off -rule UNOPTFLAT -file "*adder8_*.v"
+//
+// DECLFILENAME: the three adder options all define `module adder8`, so they cannot
+// all be named adder8.v. Exactly one of them is compiled at a time.
+lint_off -rule DECLFILENAME -file "*adder8_*.v"
