@@ -4,12 +4,6 @@ An **ASIC** — application-specific integrated circuit — is a chip built to d
 
 ASIC 101 walks the whole path once, end to end, on a design small enough to finish: RTL, simulation, synthesis, place and route, and a GDS file that could actually be taped out.
 
-## What you need before lesson 2
-
-- A Linux shell you're comfortable in (WSL is fine)
-- Git, and a GitHub account for turning in work
-- Verilog at the level of EE 2301 — modules, always blocks, testbenches
-
 ## The flow, in order
 
 | Stage | You write | The tool produces |
@@ -29,17 +23,13 @@ module blink #(parameter N = 24) (
 );
   reg [N-1:0] count;
   always @(posedge clk or negedge rst_n)
-    if (!rst_n) count <= 0;
-    else        count <= count + 1'b1;
+    if (!rst_n)
+      count <= 0;
+    else
+      count <= count + 1'b1;
 
   assign led = count[N-1];
 endmodule
 ```
 
 Nothing here is ASIC-specific yet — that's the point. The RTL is the same; everything downstream of it changes.
-
-## Checklist
-
-- [x] Read this page
-- [ ] Install the toolchain
-- [ ] Simulate `blink` and screenshot the waveform
