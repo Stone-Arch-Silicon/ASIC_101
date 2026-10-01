@@ -1,35 +1,30 @@
-# What an ASIC is, and what we're building
+# ASIC 101 — Beginner Track, Open-Source Edition
 
-An **ASIC** — application-specific integrated circuit — is a chip built to do one job, with the logic frozen into the silicon at manufacturing time. That's the trade: an FPGA can be reprogrammed after it ships, an ASIC can't, and in exchange the ASIC is smaller, faster, and far cheaper per unit at volume.
+## Course philosophy
 
-ASIC 101 walks the whole path once, end to end, on a design small enough to finish: RTL, simulation, synthesis, place and route, and a GDS file that could actually be taped out.
+You should not need to arrive knowing Verilog, simulation, synthesis, timing, PDKs, or physical design.
 
-## The flow, in order
+Every page follows the same pattern:
 
-| Stage | You write | The tool produces |
-| --- | --- | --- |
-| RTL | Verilog | — |
-| Simulation | Testbench | Waveforms |
-| Synthesis | Constraints | Gate-level netlist |
-| Place & route | Floorplan | GDSII layout |
+1. **What you are learning**
+2. **Why it matters**
+3. **Exactly what to type or build**
+4. **What you should see**
+5. **What can go wrong**
+6. **A checklist before moving on**
 
-## A first module
+The project used throughout the course is an **8-bit arithmetic logic unit (ALU)**. It is intentionally small enough that you can understand every signal, verify every possible input combination, synthesize it quickly, and later push it through a complete RTL-to-GDSII ASIC flow.
 
-```verilog
-module blink #(parameter N = 24) (
-  input  wire clk,
-  input  wire rst_n,
-  output wire led
-);
-  reg [N-1:0] count;
-  always @(posedge clk or negedge rst_n)
-    if (!rst_n)
-      count <= 0;
-    else
-      count <= count + 1'b1;
+## Open-source toolchain used in these pages
 
-  assign led = count[N-1];
-endmodule
-```
+- **Icarus Verilog** — Verilog compiler and simulator
+- **GTKWave** — waveform viewer
+- **Yosys** — RTL synthesis
+- **Graphviz** — schematic rendering used by Yosys
+- **Git** — version control
+- **LibreLane** — open-source RTL-to-GDS flow controller
+- **OpenROAD** — physical design, timing, placement, clock tree synthesis, routing, and optimization
+- **SKY130** — open PDK used for the ASIC implementation
+- **KLayout / Magic / Netgen** — layout viewing and physical verification tools used later in the course
 
-Nothing here is ASIC-specific yet — that's the point. The RTL is the same; everything downstream of it changes.
+For the first ten pages, the easiest installation path is **OSS CAD Suite**, a distribution of open-source digital-design tools maintained by YosysHQ.
