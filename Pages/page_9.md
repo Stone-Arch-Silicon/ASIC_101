@@ -1,285 +1,486 @@
-# Analyze and submit the ALU
+# Page 9 — Verify the ALU properly
 
-The final step is to turn Vivado's reports into an engineering summary. Record area proxies, timing, and power, explain what limits the design, and submit the complete repository.
+## What you are learning
 
-## Overview
+Verification is not “look at a waveform and decide it seems okay.”
 
-This page is intentionally **PPA-style**:
+A good beginner project should tell you automatically when it is wrong.
 
-```text
-Power
-Performance
-Area
-```
+On this page you will:
 
-But remember what you implemented.
+- exhaustively verify every combinational ALU input
+- keep the exhaustive test separate from waveform generation
+- create a small directed waveform test
+- learn a repeatable debugging process
 
-Vivado mapped your RTL to an **FPGA**, not to ASIC standard cells.
+## 1. How many ALU input combinations exist?
 
-That means:
-
-- LUT count is an FPGA area proxy, not ASIC cell area
-- Vivado FPGA power is not ASIC power
-- FPGA routing and dedicated carry chains affect timing
-- the same RTL may behave very differently in an ASIC physical-design flow
-
-The point is to learn how to read implementation reports and reason about hardware tradeoffs.
-
-## Prerequisites
-
-- [Vivado implementation complete](page_8.md)
-- all report files exported
-
-## Steps
-
-### 1. Record the adder you chose
-
-In your README:
+The ALU core has:
 
 ```text
-Adder architecture: Ripple Carry
+256 possible values of a
+256 possible values of b
+8 possible values of op
 ```
 
-or:
+Therefore:
 
 ```text
-Adder architecture: Carry Lookahead
+256 × 256 × 8 = 524,288
 ```
 
-or:
+input combinations.
+
+That is small enough to simulate exhaustively.
+
+For a large processor, exhaustive simulation would be impossible.
+
+For this tiny ALU, it is ideal.
+
+## 2. Create the exhaustive testbench
+
+Create:
 
 ```text
-Adder architecture: Carry Select
+sim/alu_tb.v
 ```
 
-### 2. Read the utilization report
+with:
+
+```verilog
+`timescale 1ns/1ps
+
+module alu_tb;
+
+  reg  [7:0] a;
+  reg  [7:0] b;
+  reg  [2:0] op;
+
+  wire [7:0] y;
+  wire       carry;
+  wire       overflow;
+  wire       zero;
+  wire       negative;
+
+  reg  [7:0] exp_y;
+  reg        exp_carry;
+  reg        exp_overflow;
+  reg        exp_zero;
+  reg        exp_negative;
+  reg  [8:0] tmp;
+
+  integer ia;
+  integer ib;
+  integer iop;
+  integer errors;
+
+  alu_core dut (
+    .a        (a),
+    .b        (b),
+    .op       (op),
+    .y        (y),
+    .carry    (carry),
+    .overflow (overflow),
+    .zero     (zero),
+    .negative (negative)
+  );
+
+  task check_current;
+    begin
+
+      exp_y        = 8'h00;
+      exp_carry    = 1'b0;
+      exp_overflow = 1'b0;
+      tmp          = 9'h000;
+
+      case (op)
+
+        3'b000: begin
+          tmp          = {1'b0, a} + {1'b0, b};
+          exp_y        = tmp[7:0];
+          exp_carry    = tmp[8];
+          exp_overflow = (~(a[7] ^ b[7])) & (exp_y[7] ^ a[7]);
+        end
+
+        3'b001: begin
+          tmp          = {1'b0, a} + {1'b0, (~b)} + 9'd1;
+          exp_y        = tmp[7:0];
+          exp_carry    = tmp[8];
+          exp_overflow = (a[7] ^ b[7]) & (exp_y[7] ^ a[7]);
+        end
+
+        3'b010: exp_y = a & b;
+        3'b011: exp_y = a | b;
+        3'b100: exp_y = a ^ b;
+        3'b101: exp_y = ~a;
+        3'b110: exp_y = a << 1;
+        3'b111: exp_y = a >> 1;
+
+      endcase
+
+      exp_zero     = (exp_y == 8'h00);
+      exp_negative = exp_y[7];
+
+      #1;
+
+      if (
+        y        !== exp_y        ||
+        carry    !== exp_carry    ||
+        overflow !== exp_overflow ||
+        zero     !== exp_zero     ||
+        negative !== exp_negative
+      ) begin
+
+        if (errors < 20) begin
+          $display(
+            "FAIL op=%b a=%h b=%h | y=%h c=%b v=%b z=%b n=%b | expected y=%h c=%b v=%b z=%b n=%b",
+            op, a, b,
+            y, carry, overflow, zero, negative,
+            exp_y, exp_carry, exp_overflow, exp_zero, exp_negative
+          );
+        end
+
+        errors = errors + 1;
+
+      end
+    end
+  endtask
+
+  initial begin
+
+    errors = 0;
+    a      = 8'h00;
+    b      = 8'h00;
+    op     = 3'b000;
+
+    for (iop = 0; iop < 8; iop = iop + 1) begin
+      for (ia = 0; ia < 256; ia = ia + 1) begin
+        for (ib = 0; ib < 256; ib = ib + 1) begin
+
+          op = iop[2:0];
+          a  = ia[7:0];
+          b  = ib[7:0];
+
+          check_current;
+
+        end
+      end
+    end
+
+    if (errors == 0)
+      $display("PASS: all 524288 exhaustive ALU vectors passed.");
+    else
+      $display("FAIL: %0d vectors failed.", errors);
+
+    $finish;
+  end
+
+endmodule
+```
+
+## 3. Why the testbench may use `+`
+
+The design rule says:
+
+> `adder8` must explicitly implement the adder structure.
+
+The testbench is different.
+
+Its job is to calculate an independent expected answer.
+
+Using:
+
+```verilog
++
+```
+
+inside the testbench is appropriate because it gives us a simple reference model to compare against the custom hardware.
+
+## 4. Compile and run the exhaustive test
+
+```bash
+iverilog \
+  -g2012 \
+  -Wall \
+  -s alu_tb \
+  -o build/alu_tb.vvp \
+  rtl/adder8.v \
+  rtl/alu_core.v \
+  sim/alu_tb.v
+
+vvp build/alu_tb.vvp
+```
+
+You want:
+
+```text
+PASS: all 524288 exhaustive ALU vectors passed.
+```
+
+Do not continue with known failures.
+
+## 5. Do not dump every exhaustive vector to a waveform
+
+A common beginner mistake is to create a VCD for a huge test.
+
+That can create unnecessarily large waveform files.
+
+Instead:
+
+```text
+exhaustive test → automatic PASS/FAIL
+small directed test → waveform
+```
+
+Use each tool for what it does best.
+
+## 6. Create a directed waveform testbench
+
+Create:
+
+```text
+sim/alu_wave_tb.v
+```
+
+with:
+
+```verilog
+`timescale 1ns/1ps
+
+module alu_wave_tb;
+
+  reg  [7:0] a;
+  reg  [7:0] b;
+  reg  [2:0] op;
+
+  wire [7:0] y;
+  wire       carry;
+  wire       overflow;
+  wire       zero;
+  wire       negative;
+
+  alu_core dut (
+    .a        (a),
+    .b        (b),
+    .op       (op),
+    .y        (y),
+    .carry    (carry),
+    .overflow (overflow),
+    .zero     (zero),
+    .negative (negative)
+  );
+
+  initial begin
+
+    $dumpfile("build/alu_wave.vcd");
+    $dumpvars(0, alu_wave_tb);
+
+    // ADD: 1 + 1 = 2
+    a = 8'h01;
+    b = 8'h01;
+    op = 3'b000;
+    #10;
+
+    // ADD with signed overflow: 127 + 1
+    a = 8'h7F;
+    b = 8'h01;
+    op = 3'b000;
+    #10;
+
+    // SUB: 0 - 1 = FF (-1 in signed interpretation)
+    a = 8'h00;
+    b = 8'h01;
+    op = 3'b001;
+    #10;
+
+    // XOR
+    a = 8'hAA;
+    b = 8'h55;
+    op = 3'b100;
+    #10;
+
+    // Shift left
+    a = 8'h81;
+    b = 8'h00;
+    op = 3'b110;
+    #10;
+
+    // Shift right
+    a = 8'h81;
+    b = 8'h00;
+    op = 3'b111;
+    #10;
+
+    $finish;
+  end
+
+endmodule
+```
+
+Compile and run:
+
+```bash
+iverilog \
+  -g2012 \
+  -Wall \
+  -s alu_wave_tb \
+  -o build/alu_wave_tb.vvp \
+  rtl/adder8.v \
+  rtl/alu_core.v \
+  sim/alu_wave_tb.v
+
+vvp build/alu_wave_tb.vvp
+```
 
 Open:
 
-```text
-reports/utilization.rpt
+```bash
+gtkwave build/alu_wave.vcd
 ```
 
-Record at least:
-
-- LUTs
-- flip-flops/registers
-- dedicated carry resources if present
-
-Depending on the target device, the exact carry primitive name may differ.
-
-Do not report the number of lines of Verilog as area.
-
-### 3. Read the timing summary
-
-Open:
+Add:
 
 ```text
-reports/timing_summary.rpt
+a
+b
+op
+y
+carry
+overflow
+zero
+negative
 ```
 
-Record:
-
-- requested clock period
-- Worst Negative Slack, or WNS
-- Total Negative Slack, or TNS
-- the startpoint and endpoint of the worst setup path
-
-Interpret WNS:
+Save:
 
 ```text
-WNS >= 0  → requested setup timing is met
-WNS < 0   → at least one setup path misses the constraint
+screenshots/alu_waveform.png
 ```
 
-Then inspect the worst path.
+## 7. Debugging procedure
+
+When a test fails, do not randomly edit code.
+
+Use this sequence.
+
+### Step A — read the first failing vector
+
+Example:
+
+```text
+FAIL op=001 a=00 b=01 ...
+```
+
+That already tells you which operation and operands triggered the bug.
+
+### Step B — reproduce only that case
+
+Put the failing input into the directed waveform test.
+
+### Step C — inspect intermediate signals
+
+Open the DUT hierarchy and inspect signals such as:
+
+```text
+sub
+b_arith
+arithmetic_result
+arithmetic_cout
+```
+
+### Step D — trace backward
 
 Ask:
 
-- Does it pass through the adder?
-- Does it pass through the final ALU output mux?
-- Which operation appears to dominate the path?
-- Did Vivado map the arithmetic into dedicated carry hardware?
+```text
+Where is the first signal that becomes wrong?
+```
 
-### 4. Read the power report
+That is usually more useful than staring only at the final output.
 
-Open:
+### Step E — fix one thing and rerun the full test
+
+After fixing the directed case, rerun all:
 
 ```text
-reports/power.rpt
+524,288
 ```
 
-Record:
+vectors.
 
-- Total On-Chip Power
-- Dynamic Power
-- Device Static Power
-- power-analysis confidence level, if shown
+A local fix is not enough if it breaks another case.
 
-Dynamic power is associated with switching activity.
+## 8. Common beginner bugs
 
-Static power exists even when logic is not actively toggling.
+### Wrong width
 
-For the base assignment, the normal post-route Vivado power report is enough.
+Example:
 
-### 5. Optional: improve power estimation with switching activity
-
-For a more advanced result, generate a SAIF file from simulation and use that switching activity in the power report.
-
-A typical Vivado Simulator flow uses commands such as:
-
-```tcl
-open_saif alu.saif
-log_saif [get_objects -r *]
-run all
-close_saif
+```verilog
+reg [7:0] tmp;
 ```
 
-Then, with the synthesized or implemented design open, read the activity file before generating power:
+cannot hold a 9-bit carry-out.
 
-```tcl
-read_saif alu.saif
-report_power -file reports/power_saif.rpt
+Use:
+
+```verilog
+reg [8:0] tmp;
 ```
 
-Hierarchy names often differ between the testbench and implemented design. If Vivado reports poor SAIF matching, use the appropriate `-strip_path` when reading the file.
+when checking 8-bit addition plus carry.
 
-This section is optional unless your team specifically requires activity-based power analysis.
+### Signedness assumptions
 
-### 6. Check implementation health
+A bit pattern has no inherent human meaning unless you know how the logic interprets it.
 
-Open:
+For example:
 
 ```text
-reports/check_timing.rpt
-reports/drc.rpt
+11111111
 ```
 
-Do not blindly ignore warnings.
-
-For each serious warning or error, decide whether it is:
-
-- expected for this educational setup
-- caused by an incomplete constraint
-- caused by an RTL problem
-- caused by a project configuration problem
-
-If the design has unresolved timing or DRC problems, mention them in the README.
-
-### 7. Create the final results table
-
-Put this in `README.md`:
-
-```markdown
-## ASIC 101 ALU results
-
-| metric | result |
-|--------|-------:|
-| Adder architecture | |
-| Target FPGA | |
-| Clock period | |
-| LUTs | |
-| Flip-flops | |
-| Carry resources | |
-| WNS | |
-| TNS | |
-| Total On-Chip Power | |
-| Dynamic Power | |
-| Device Static Power | |
-| Power confidence | |
-```
-
-### 8. Write a short interpretation
-
-Under the table, answer these questions in your own words:
-
-1. What adder architecture did you choose, and why?
-2. What is the critical timing path?
-3. Did the design meet the 100 MHz clock constraint?
-4. What resource appears most important to the arithmetic implementation?
-5. How much of the estimated power is dynamic versus static?
-6. What would you change if you wanted to optimize the design for speed?
-7. Why are these FPGA measurements not the same thing as ASIC PPA?
-
-Keep this section short. A few sentences or bullets are enough.
-
-### 9. Final repository structure
-
-Your submission should look approximately like:
+may be:
 
 ```text
-asic_101/
-├── rtl/
-│   ├── adder8.v
-│   ├── alu_core.v
-│   └── alu_top.v
-├── sim/
-│   └── alu_tb.v
-├── constr/
-│   └── alu.xdc
-├── reports/
-│   ├── check_timing.rpt
-│   ├── drc.rpt
-│   ├── power.rpt
-│   ├── timing_summary.rpt
-│   └── utilization.rpt
-├── screenshots/
-│   ├── simulation.png
-│   ├── synthesized_schematic.png
-│   ├── implemented_device.png
-│   ├── timing_summary.png
-│   └── power_summary.png
-└── README.md
+255 unsigned
 ```
 
-### 10. Push to GitHub
+or:
 
-Before submitting:
+```text
+-1 signed two's complement
+```
+
+### Latches
+
+If a combinational `always @*` block does not assign every output on every path, synthesis may infer storage.
+
+### Confusing carry with overflow
+
+They describe different arithmetic conditions.
+
+### Huge waveforms
+
+Do not dump every signal for every exhaustive vector unless you have a specific reason.
+
+## 9. Save your verified revision
+
+Once the exhaustive test passes:
 
 ```bash
-git status
-git add .
-git commit -m "Complete ASIC 101 ALU"
-git push
+git add rtl sim screenshots
+git commit -m "Verify 8-bit ALU"
 ```
 
-Make sure the reports and screenshots actually made it into the repository.
+This gives you a known-good RTL revision before synthesis.
 
-## Results
+## Before continuing
 
-A complete ASIC 101 submission demonstrates the entire introductory RTL-to-FPGA implementation loop:
+You are ready for synthesis when:
 
-```text
-specification
-→ RTL
-→ custom arithmetic architecture
-→ exhaustive verification
-→ synthesis
-→ implementation
-→ timing analysis
-→ utilization analysis
-→ power analysis
-→ engineering interpretation
-```
-
-The next ASIC-specific step is to take verified RTL into a standard-cell physical-design flow and measure actual ASIC area, timing, and power.
-
-## Checklist
-
-- [ ] Recorded adder architecture
-- [ ] Recorded LUT and register utilization
-- [ ] Recorded carry resources
-- [ ] Recorded WNS and TNS
-- [ ] Inspected the critical path
-- [ ] Recorded total, dynamic, and static power
-- [ ] Checked timing warnings
-- [ ] Checked DRC warnings
-- [ ] Completed the README results table
-- [ ] Wrote the short engineering interpretation
-- [ ] Included reports
-- [ ] Included screenshots
-- [ ] Pushed the final repository
-
----
-
-*Questions? Ask in the network Discord.*
+- [ ] the adder exhaustive test passes
+- [ ] all 524,288 ALU combinations pass
+- [ ] you inspected the directed ALU waveform
+- [ ] you understand how to reproduce a failing vector
+- [ ] the verified RTL is committed to Git
