@@ -1,261 +1,370 @@
-# Build the 8-bit ALU
+# Page 3 — Bits, gates, binary numbers, and the two kinds of digital logic
 
-The ALU is the common project used by everyone in ASIC 101. You will implement eight operations and route ADD and SUB through the custom adder architecture you choose.
+## What you are learning
 
-## Overview
+Before writing HDL, you need the vocabulary that HDL describes.
 
-Your ALU accepts two 8-bit operands and a 3-bit operation code.
+By the end of this page, you should understand:
 
-| `op` | operation | result |
-|------|-----------|--------|
-| `000` | ADD | `a + b` |
-| `001` | SUB | `a - b` |
-| `010` | AND | `a & b` |
-| `011` | OR | `a \| b` |
-| `100` | XOR | `a ^ b` |
-| `101` | NOT | `~a` |
-| `110` | Shift left | `a << 1` |
-| `111` | Shift right | `a >> 1` |
+- bits
+- buses
+- binary and hexadecimal
+- Boolean logic
+- truth tables
+- combinational logic
+- sequential logic
+- unsigned and two's-complement numbers
 
-The ALU also produces four status flags:
+## 1. One bit
 
-- `zero`: result is zero
-- `negative`: most-significant bit of the result is one
-- `carry`: carry-out from ADD or SUB
-- `overflow`: signed two's-complement overflow on ADD or SUB
-
-The core is combinational. A small registered wrapper is added so Vivado has a clean register-to-register timing path to analyze later.
-
-## Prerequisites
-
-- prior page: [ASIC 101 project setup](page_2.md)
-- basic combinational Verilog
-- understanding of two's-complement subtraction
-
-## Steps
-
-### 1. Use one common adder interface
-
-Whichever adder you choose later, it must use this exact module interface:
-
-```verilog
-module adder8 (
-  input  wire [7:0] a,
-  input  wire [7:0] b,
-  input  wire       cin,
-  output wire [7:0] sum,
-  output wire       cout
-);
-  // your architecture goes here
-endmodule
-```
-
-This lets every adder plug into the exact same ALU.
-
-### 2. Reuse the adder for subtraction
-
-Two's-complement subtraction is
+A **bit** stores or represents one binary value:
 
 ```text
-a - b = a + (~b) + 1
+0
+or
+1
 ```
 
-That means the same adder can perform both operations.
-
-```verilog
-wire sub;
-wire [7:0] b_arith;
-
-assign sub     = (op == 3'b001);
-assign b_arith = b ^ {8{sub}};
-```
-
-For ADD:
+A single hardware signal may therefore be:
 
 ```text
-sub = 0
-b_arith = b
-cin = 0
+a = 0
 ```
 
-For SUB:
+or:
 
 ```text
-sub = 1
-b_arith = ~b
-cin = 1
+a = 1
 ```
 
-### 3. Create `rtl/alu_core.v`
+HDL simulators also have values such as `x` and `z`, which we will discuss when debugging. For now, begin with `0` and `1`.
 
-Use this as the project skeleton:
+## 2. Logic gates
 
-```verilog
-module alu_core (
-  input  wire [7:0] a,
-  input  wire [7:0] b,
-  input  wire [2:0] op,
+### NOT
 
-  output reg  [7:0] y,
-  output reg        carry,
-  output reg        overflow,
-  output reg        zero,
-  output reg        negative
-);
+NOT inverts a bit.
 
-  wire       sub;
-  wire [7:0] b_arith;
-  wire [7:0] arithmetic_result;
-  wire       arithmetic_cout;
+| `a` | `~a` |
+| ---: | ---: |
+| 0 | 1 |
+| 1 | 0 |
 
-  assign sub     = (op == 3'b001);
-  assign b_arith = b ^ {8{sub}};
+### AND
 
-  adder8 u_adder (
-    .a    (a),
-    .b    (b_arith),
-    .cin  (sub),
-    .sum  (arithmetic_result),
-    .cout (arithmetic_cout)
-  );
+AND produces `1` only when both inputs are `1`.
 
-  always @* begin
-    y        = 8'h00;
-    carry    = 1'b0;
-    overflow = 1'b0;
+| `a` | `b` | `a & b` |
+| ---: | ---: | ---: |
+| 0 | 0 | 0 |
+| 0 | 1 | 0 |
+| 1 | 0 | 0 |
+| 1 | 1 | 1 |
 
-    case (op)
-      3'b000: begin
-        y        = arithmetic_result;
-        carry    = arithmetic_cout;
-        overflow = (~(a[7] ^ b[7])) & (y[7] ^ a[7]);
-      end
+### OR
 
-      3'b001: begin
-        y        = arithmetic_result;
-        carry    = arithmetic_cout;
-        overflow = (a[7] ^ b[7]) & (y[7] ^ a[7]);
-      end
+OR produces `1` when either input is `1`.
 
-      3'b010: y = a & b;
-      3'b011: y = a | b;
-      3'b100: y = a ^ b;
-      3'b101: y = ~a;
-      3'b110: y = a << 1;
-      3'b111: y = a >> 1;
+| `a` | `b` | `a \| b` |
+| ---: | ---: | ---: |
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 0 | 1 |
+| 1 | 1 | 1 |
 
-      default: y = 8'h00;
-    endcase
+### XOR
 
-    zero     = (y == 8'h00);
-    negative = y[7];
-  end
+XOR produces `1` when the two inputs are different.
 
-endmodule
-```
+| `a` | `b` | `a ^ b` |
+| ---: | ---: | ---: |
+| 0 | 0 | 0 |
+| 0 | 1 | 1 |
+| 1 | 0 | 1 |
+| 1 | 1 | 0 |
 
-For subtraction, `carry = 1` generally corresponds to **no borrow** in this two's-complement implementation.
+These operations will appear constantly in RTL.
 
-### 4. Create a registered top level
+## 3. More than one bit: buses
 
-Create `rtl/alu_top.v`.
+An 8-bit value is a group of eight signals.
 
-```verilog
-module alu_top (
-  input  wire       clk,
-  input  wire       rst_n,
-  input  wire [7:0] a,
-  input  wire [7:0] b,
-  input  wire [2:0] op,
-
-  output reg  [7:0] y,
-  output reg        carry,
-  output reg        overflow,
-  output reg        zero,
-  output reg        negative
-);
-
-  reg [7:0] a_q;
-  reg [7:0] b_q;
-  reg [2:0] op_q;
-
-  wire [7:0] y_comb;
-  wire       carry_comb;
-  wire       overflow_comb;
-  wire       zero_comb;
-  wire       negative_comb;
-
-  alu_core u_core (
-    .a        (a_q),
-    .b        (b_q),
-    .op       (op_q),
-    .y        (y_comb),
-    .carry    (carry_comb),
-    .overflow (overflow_comb),
-    .zero     (zero_comb),
-    .negative (negative_comb)
-  );
-
-  always @(posedge clk) begin
-    if (!rst_n) begin
-      a_q      <= 8'h00;
-      b_q      <= 8'h00;
-      op_q     <= 3'b000;
-      y        <= 8'h00;
-      carry    <= 1'b0;
-      overflow <= 1'b0;
-      zero     <= 1'b1;
-      negative <= 1'b0;
-    end
-    else begin
-      a_q      <= a;
-      b_q      <= b;
-      op_q     <= op;
-
-      y        <= y_comb;
-      carry    <= carry_comb;
-      overflow <= overflow_comb;
-      zero     <= zero_comb;
-      negative <= negative_comb;
-    end
-  end
-
-endmodule
-```
-
-The input registers launch data through `alu_core`, and the output registers capture the result on the next rising clock edge. That gives Vivado a meaningful internal timing path.
-
-### 5. Choose your adder
-
-Now choose **one** path:
-
-- simplest: [Ripple Carry Adder — page 4](page_4.md)
-- more logic, less serial carry propagation: [Carry Lookahead Adder — page 5](page_5.md)
-- duplicated upper-half arithmetic with a mux: [Carry Select Adder — page 6](page_6.md)
-
-You only complete one page.
-
-## Results
-
-Before moving on, you should have:
+Example:
 
 ```text
-rtl/
-├── alu_core.v
-└── alu_top.v
+10110110
 ```
 
-Your `adder8.v` comes from whichever adder page you choose.
+In Verilog, an 8-bit signal can be declared as:
 
-## Checklist
+```verilog
+wire [7:0] data;
+```
 
-- [ ] Understand the eight ALU operations
-- [ ] Understand how ADD and SUB share one adder
-- [ ] Created `alu_core.v`
-- [ ] Created `alu_top.v`
-- [ ] Selected one adder architecture
-- [ ] Continued to page 4, 5, or 6
+The bits are numbered:
 
----
+```text
+data[7] data[6] ... data[1] data[0]
+```
 
-*Questions? Ask in the network Discord.*
+`data[7]` is the most-significant bit.
+
+`data[0]` is the least-significant bit.
+
+## 4. Binary and hexadecimal
+
+Binary becomes difficult to read once values get wider.
+
+Four binary bits correspond exactly to one hexadecimal digit.
+
+```text
+binary    hex
+0000      0
+0001      1
+0010      2
+...
+1001      9
+1010      A
+1011      B
+1100      C
+1101      D
+1110      E
+1111      F
+```
+
+So:
+
+```text
+1010 0101
+```
+
+is:
+
+```text
+0xA5
+```
+
+In Verilog:
+
+```verilog
+8'b10100101
+```
+
+and:
+
+```verilog
+8'hA5
+```
+
+represent the same 8-bit pattern.
+
+The notation is:
+
+```text
+width ' base value
+```
+
+Examples:
+
+```verilog
+1'b0
+4'b1010
+8'hFF
+16'd1000
+```
+
+## 5. Unsigned numbers
+
+An 8-bit unsigned number can represent:
+
+```text
+0 through 255
+```
+
+because:
+
+```text
+2^8 = 256
+```
+
+Examples:
+
+```text
+00000000 = 0
+00000001 = 1
+00001101 = 13
+11111111 = 255
+```
+
+## 6. Two's-complement signed numbers
+
+The same 8 bits can instead be interpreted as a signed two's-complement number.
+
+For 8 bits:
+
+```text
+-128 through +127
+```
+
+Examples:
+
+```text
+00000000 =   0
+00000001 =   1
+01111111 = 127
+11111111 =  -1
+10000000 = -128
+```
+
+A useful way to compute the negative of an `N`-bit two's-complement number is:
+
+```text
+invert all bits
+then add 1
+```
+
+For example, starting from `5`:
+
+```text
+5          = 00000101
+invert     = 11111010
+add 1      = 11111011
+```
+
+So `11111011` represents `-5` in 8-bit two's complement.
+
+We will use this exact trick to build subtraction from an adder.
+
+## 7. Combinational logic
+
+A combinational circuit has outputs determined by its **current inputs**.
+
+Examples:
+
+```text
+AND gate
+mux
+adder
+ALU core
+decoder
+```
+
+Conceptually:
+
+```text
+inputs → logic → outputs
+```
+
+There is no memory of previous input values.
+
+## 8. Sequential logic
+
+Sequential logic contains state.
+
+The most important basic storage element for this course is a **flip-flop**.
+
+A register made from flip-flops stores a value across time.
+
+Conceptually:
+
+```text
+input logic
+    ↓
+register
+    ↓
+more logic
+    ↓
+register
+```
+
+A clock tells registers when to capture new values.
+
+Later, timing analysis will ask whether data can travel from one register to another fast enough before the next required clock edge.
+
+## 9. Why both matter
+
+Most real synchronous digital designs contain both:
+
+```text
+combinational logic
++
+registers
+```
+
+The ALU operation itself is combinational.
+
+We will also wrap it with registers so that later synthesis and timing analysis have a clean register-to-register path.
+
+## Mini exercises
+
+Do these without a simulator.
+
+### Exercise 1
+
+Convert decimal `13` to 8-bit binary.
+
+Answer:
+
+```text
+00001101
+```
+
+### Exercise 2
+
+Convert:
+
+```text
+10100101
+```
+
+to hexadecimal.
+
+Answer:
+
+```text
+A5
+```
+
+### Exercise 3
+
+What is:
+
+```text
+1 XOR 1
+```
+
+Answer:
+
+```text
+0
+```
+
+### Exercise 4
+
+What 8-bit pattern represents `-1`?
+
+Answer:
+
+```text
+11111111
+```
+
+### Exercise 5
+
+Which type of circuit remembers a previous value?
+
+Answer:
+
+```text
+sequential logic
+```
+
+## Before continuing
+
+You are ready for Page 4 when you can explain:
+
+- what `[7:0]` means
+- why `8'hA5` is eight bits
+- AND, OR, XOR, and NOT
+- the difference between combinational and sequential logic
+- why two's complement is useful for subtraction
