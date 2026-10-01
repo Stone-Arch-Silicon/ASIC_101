@@ -126,13 +126,11 @@ again.
 
 Use any editor you are comfortable with.
 
-If you want a graphical open-source editor, **VSCodium** is a good choice:
-
-https://vscodium.com/
-
-Other open-source choices include:
+Open-source choices include:
 
 ```text
+VSCode
+VSCodium
 Neovim
 Vim
 Emacs
