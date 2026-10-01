@@ -1,260 +1,366 @@
-# Install LibreLane, OpenROAD, and the ASIC toolchain
+# Page 11 — From synthesized logic to real silicon: PDKs and standard cells
 
-Install the complete reproducible open-source ASIC environment. LibreLane bundles compatible versions of Yosys, OpenROAD, Magic, KLayout, Netgen, and the other tools used by the default flow.
+## What you are learning
 
-## Overview
+The first ten pages were mostly technology-independent.
 
-Do **not** separately install random versions of every EDA tool unless you know exactly why you are doing it.
+Now we need to connect the RTL to a manufacturing process.
 
-ASIC flows are sensitive to tool versions.
+This page introduces:
 
-LibreLane provides a matched environment so:
+- PDKs
+- standard cells
+- Liberty
+- LEF
+- DEF
+- GDSII
+- SDC
+- SPEF
+- process corners
+- the physical-design flow
+
+You are not expected to memorize every file format immediately.
+
+The goal is to understand why each category exists.
+
+## 1. RTL does not contain geometry
+
+This RTL:
+
+```verilog
+assign y = a & b;
+```
+
+does not tell a foundry:
 
 ```text
-LibreLane
-Yosys
-OpenROAD
-Magic
-KLayout
-Netgen
-OpenRCX
-Volare
+where transistors are
+how wide the metal is
+which routing layer to use
+where the cell sits
+how much delay the gate has
+how much capacitance the pins have
 ```
 
-work together.
+RTL describes logical behavior.
 
-There are three common installation methods:
+A manufacturing process requires physical and electrical information.
 
-| method | recommendation |
-|--------|----------------|
-| Nix | best/reproducible |
-| AppImage | easiest on Linux/WSL |
-| Docker | fallback |
+## 2. What is a PDK?
 
-For the network, **Nix is the default path**.
-
-AppImage is a good fallback if Nix gives you trouble.
-
-## Prerequisites
-
-- [RTL-to-GDS overview](page_10.md)
-- internet connection
-- several GB of free disk space
-- Linux/WSL2/macOS
-
-## Steps
-
-### 1. Windows users: install WSL2
-
-Open PowerShell as Administrator:
-
-```powershell
-wsl --install -d Ubuntu
-```
-
-Restart if Windows asks you to.
-
-Then check:
-
-```powershell
-wsl --list --verbose
-```
-
-You want Ubuntu to show:
+PDK means:
 
 ```text
-VERSION
-2
+Process Design Kit
 ```
 
-LibreLane requires WSL2, not WSL1.
+A PDK contains data and rules needed to design for a particular semiconductor process.
 
-Launch Ubuntu from the Start menu.
+Depending on the PDK and flow, this can include:
 
-From this point onward, run Linux commands **inside Ubuntu/WSL**, not PowerShell.
+- layer definitions
+- design rules
+- transistor models
+- extraction rules
+- technology files
+- device models
+- standard-cell libraries
+- timing information
+- layout information
 
-### 2. Linux and WSL users: install basic tools
+ASIC 101 uses the open SKY130 ecosystem.
 
-```bash
-sudo apt-get update
-sudo apt-get install -y curl git
-```
+## 3. What is a standard cell?
 
-### 3. Install Nix
+A standard cell is a predesigned, characterized logic building block.
 
-Do **not** install Nix with `apt`.
-
-Use the current Nix installer:
-
-```bash
-curl --proto '=https' --tlsv1.2 -fsSL \
-  https://artifacts.nixos.org/nix-installer | \
-  sh -s -- install --no-confirm --extra-conf "
-extra-substituters = https://nix-cache.fossi-foundation.org
-extra-trusted-public-keys = nix-cache.fossi-foundation.org:3+K59iFwXqKsL7BNu6Guy0v+uTlwsxYQxjspXzqLYQs=
-extra-experimental-features = nix-command flakes
-"
-```
-
-Close the terminal completely and open it again.
-
-Why the binary cache?
-
-Without it, Nix may build large EDA tools from source.
-
-The cache lets you download reproducible pre-built tool binaries instead.
-
-### 4. Clone LibreLane
-
-```bash
-cd ~
-git clone https://github.com/librelane/librelane
-```
-
-Enter the repository:
-
-```bash
-cd ~/librelane
-```
-
-### 5. Enter the EDA environment
-
-```bash
-nix-shell
-```
-
-Your shell prompt should indicate that you are inside a Nix shell.
-
-Every ASIC command in later pages assumes you are inside this environment.
-
-If you leave the shell, enter it again with:
-
-```bash
-cd ~/librelane
-nix-shell
-```
-
-### 6. Run the smoke test
-
-```bash
-librelane --smoke-test
-```
-
-The first run may also obtain the supported PDK through Volare.
-
-The smoke test must finish successfully before continuing.
-
-### 7. Confirm the important tools exist
-
-Run:
-
-```bash
-librelane --version
-yosys -V
-openroad -version
-klayout -v
-magic --version
-netgen -batch <<<'quit'
-```
-
-Exact version strings will change over time.
-
-What matters is that the commands execute inside the LibreLane environment.
-
-### 8. Optional fallback: AppImage
-
-On supported Linux systems:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y \
-  build-essential python3 python3-venv python3-pip \
-  python3-tk curl make git
-```
-
-Download the matching LibreLane devshell AppImage from the current LibreLane release page.
-
-Most x86-64 machines use:
+Examples include:
 
 ```text
-librelane-devshell-x86_64.AppImage
+inverter
+NAND
+NOR
+XOR
+mux
+buffer
+flip-flop
+clock buffer
 ```
 
-Then:
+Instead of drawing every transistor in your synthesized design manually, synthesis maps logic onto cells from a library.
 
-```bash
-chmod a+x ~/librelane-devshell-$(uname -m).AppImage
-~/librelane-devshell-$(uname -m).AppImage
-```
+The physical-design tools then place instances of those cells and connect them with metal.
 
-Test it:
+## 4. One cell has multiple views
 
-```bash
-librelane --smoke-test
-```
+Different tools need different information about the same cell.
 
-Do not install both methods just because both exist. Pick one working environment.
-
-### 9. Run the built-in example
-
-Create a scratch folder:
-
-```bash
-mkdir -p ~/asic_examples
-cd ~/asic_examples
-```
-
-Run:
-
-```bash
-librelane --run-example spm
-```
-
-If the example reaches the end successfully, your machine has completed a real RTL-to-GDS flow.
-
-### 10. Open the example layout
-
-Inside the folder containing the copied example configuration:
-
-```bash
-librelane --last-run --flow OpenInKLayout config.json
-```
-
-You should see physical chip geometry rather than RTL source code.
-
-## Results
-
-A working installation should provide:
+For example, a NAND gate may have:
 
 ```text
-librelane
-yosys
-openroad
-klayout
-magic
-netgen
+logical function
+timing delay
+input capacitance
+physical width and height
+pin locations
+transistor-level connectivity
+final mask geometry
 ```
 
-and a working Sky130 PDK managed by Volare.
+One file format is not ideal for all of those jobs.
 
-Official documentation:
+That is why ASIC flows use several views.
 
-- [LibreLane installation](https://librelane.readthedocs.io/en/stable/installation/)
-- [LibreLane newcomer tutorial](https://librelane.readthedocs.io/en/stable/getting_started/newcomers/)
-- [OpenROAD documentation](https://openroad.readthedocs.io/)
+## 5. Liberty (`.lib`)
 
-## Checklist
+A Liberty file commonly provides timing and power characterization.
 
-- [ ] WSL2/Linux/macOS environment works
-- [ ] Nix or AppImage environment works
-- [ ] `librelane --smoke-test` passes
-- [ ] Yosys runs
-- [ ] OpenROAD runs
-- [ ] KLayout opens
-- [ ] Built-in example finishes
-- [ ] Opened an example layout
-- [ ] Continued to page 12
+It may describe:
 
----
+```text
+cell delays
+transition behavior
+setup and hold constraints
+input capacitance
+power models
+operating conditions
+```
 
-*Questions? Ask in the network Discord.*
+Timing analysis needs this information.
+
+## 6. LEF (`.lef`)
+
+LEF is an abstract physical view.
+
+For a standard cell, it can describe things such as:
+
+```text
+cell dimensions
+pin shapes
+routing obstructions
+placement information
+```
+
+LEF is much lighter than full mask geometry, so place-and-route tools can work efficiently.
+
+## 7. GDSII (`.gds`)
+
+GDSII contains detailed layout geometry.
+
+This is the kind of final geometric representation associated with mask-layout data.
+
+A final GDS can be visually impressive, but remember:
+
+```text
+having a GDS file does not automatically mean the design is correct
+```
+
+Timing, DRC, LVS, antenna, power integrity, integration requirements, and other checks still matter.
+
+## 8. DEF (`.def`)
+
+DEF describes a physical implementation in an exchange format.
+
+It can contain information such as:
+
+```text
+die area
+rows
+placed components
+pins
+routing
+vias
+```
+
+Think of it as a structured description of the placed/routed design state.
+
+## 9. SDC (`.sdc`)
+
+SDC contains timing constraints.
+
+A basic clock constraint says something like:
+
+```text
+this port is a clock
+the desired period is 10 ns
+```
+
+Constraints describe what the design must satisfy.
+
+A 10 ns period means:
+
+```text
+100 MHz
+```
+
+because:
+
+```text
+frequency = 1 / period
+```
+
+The clock constraint is a requirement.
+
+It is not proof that the design can actually run at that frequency.
+
+## 10. SPEF (`.spef`)
+
+After routing, wires have real physical length and geometry.
+
+Those wires create parasitic:
+
+```text
+resistance
+capacitance
+```
+
+SPEF is a common format for extracted parasitic information.
+
+Post-route timing analysis can use those parasitics to estimate delays more realistically.
+
+## 11. Process, voltage, and temperature
+
+Cell delay changes with conditions.
+
+Designers often discuss:
+
+```text
+PVT
+```
+
+meaning:
+
+```text
+Process
+Voltage
+Temperature
+```
+
+A design that works under one condition may not have identical timing under another.
+
+That is why timing libraries and signoff flows use defined operating corners.
+
+You do not need to master multi-corner signoff yet.
+
+You only need to understand why “the delay of this gate” is not one universal constant.
+
+## 12. The physical-design sequence
+
+The ASIC flow will look approximately like:
+
+```text
+RTL
+ ↓
+lint
+ ↓
+synthesis
+ ↓
+standard-cell netlist
+ ↓
+floorplan
+ ↓
+power distribution network
+ ↓
+placement
+ ↓
+clock tree synthesis
+ ↓
+routing
+ ↓
+parasitic extraction
+ ↓
+static timing analysis
+ ↓
+physical verification
+ ↓
+GDSII
+```
+
+### Floorplan
+
+Defines physical boundaries, core area, placement rows, and major structural assumptions.
+
+### Power distribution
+
+Creates the network that delivers supply and ground to cells.
+
+### Placement
+
+Chooses physical cell locations.
+
+### Clock tree synthesis
+
+Builds a real buffered clock-distribution network.
+
+### Routing
+
+Connects signal pins with legal metal and vias.
+
+### Extraction
+
+Models wire resistance and capacitance.
+
+### Static timing analysis
+
+Checks timing paths using constraints and delay models.
+
+### Physical verification
+
+Checks whether the layout obeys physical and connectivity rules.
+
+## 13. Why we made `alu_top`
+
+The registered wrapper from Page 8 gives us:
+
+```text
+input registers
+   ↓
+ALU combinational path
+   ↓
+output registers
+```
+
+That makes timing analysis much easier to understand than a purely combinational block with undefined external timing assumptions.
+
+The main setup path will be some version of:
+
+```text
+launch flip-flop
+   ↓
+ALU logic
+   ↓
+capture flip-flop
+```
+
+This is the path you will later inspect in static timing analysis.
+
+## 14. Our process and library
+
+For the introductory ASIC flow, use:
+
+```text
+PDK: sky130A
+standard-cell library: sky130_fd_sc_hd
+```
+
+Do not interpret the `130` in SKY130 as a direct performance comparison to modern leading-edge processors.
+
+The value of SKY130 here is that it gives students an accessible open ecosystem in which the entire physical-design flow can be inspected and reproduced.
+
+## Before continuing
+
+You should be able to explain, at a high level:
+
+- why RTL alone is not enough to fabricate a chip
+- what a PDK provides
+- what a standard cell is
+- the difference between Liberty and LEF
+- what GDSII represents
+- why routed wires affect timing
+- why timing depends on constraints and operating conditions
+
+## References
+
+- SKY130 PDK documentation: https://skywater-pdk.readthedocs.io/
+- OpenROAD documentation: https://openroad.readthedocs.io/
+- LibreLane documentation: https://librelane.readthedocs.io/
