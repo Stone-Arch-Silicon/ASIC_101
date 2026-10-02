@@ -1,252 +1,373 @@
-# Inspect every stage and every major ASIC file
+# Page 23 — Learn the ASIC file formats and inspect the flow as a timeline
 
-The run directory is a history of the chip being constructed. Use intermediate states to visually inspect what changed at each step instead of treating the flow as a black box.
+## What you are learning
 
-## Overview
+An ASIC flow produces many files because different tools need different views of the same design.
 
-Each LibreLane step receives a design state and produces a new state.
+The goal is not to memorize file extensions in isolation.
 
-A typical step directory contains files such as:
+The goal is to understand this idea:
 
 ```text
-COMMANDS
-config.json
-*.log
-*.odb
-*.def
-*.nl.v
-*.pnl.v
-*.sdc
-state_in.json
-state_out.json
+one design
+→ many representations
+→ each representation answers a different engineering need
 ```
 
-### Important formats
+## 1. The most important formats
 
-| format | purpose |
-|--------|---------|
-| `.v` RTL | behavioral/source logic |
-| `.nl.v` | gate-level netlist without explicit power connections |
-| `.pnl.v` | gate-level netlist with power connections |
-| `.sdc` | timing constraints |
-| `.def` | physical implementation exchange: rows, components, pins, routing |
-| `.lef` | abstract macro physical view |
-| `.odb` | OpenROAD/OpenDB design database |
-| `.spef` | extracted parasitic resistance/capacitance |
-| `.sdf` | timing delays for timing-aware simulation |
-| `.lib` | Liberty timing/power model |
-| `.spice` | electrical/transistor-level netlist |
-| `.gds` | final geometric mask-layout stream |
+### RTL Verilog — `.v`
 
-### LEF vs GDS
+Human-authored behavioral/structural design source.
 
-LEF is intentionally abstract.
-
-A macro LEF tells a parent design things such as:
+Example:
 
 ```text
-block dimensions
-pin shapes
+rtl/alu_top.v
+```
+
+This is your primary design source of truth.
+
+### Gate-level netlist — `.v`, `.nl.v`, `.pnl.v`
+
+Describes connectivity between instantiated cells instead of high-level behavioral RTL.
+
+A physical/power-aware netlist may include explicit supply connections.
+
+### SDC — `.sdc`
+
+**Synopsys Design Constraints** format.
+
+Describes timing intent such as:
+
+```text
+clocks
+input/output delays
+timing exceptions
+```
+
+### Liberty — `.lib`
+
+Contains characterized cell information used for timing and often power modeling.
+
+For a standard cell, Liberty can describe relationships such as:
+
+```text
+input transition
+output load
+cell delay
+setup/hold constraints
+power information
+```
+
+### LEF — `.lef`
+
+A physical **abstract** view.
+
+For place-and-route, a cell does not always need every transistor polygon.
+
+It needs key physical information such as:
+
+```text
+cell size
+pin locations
 routing obstructions
 ```
 
-without requiring the parent router to understand every transistor polygon.
+### DEF — `.def`
 
-GDS contains the detailed physical geometry.
+Describes an implemented design at the placement/routing level.
 
-### DEF vs GDS
-
-DEF describes an implementation using design objects and physical coordinates.
-
-GDS is a lower-level geometric layout stream.
-
-### ODB
-
-ODB is OpenROAD's database representation.
-
-It is especially useful because OpenROAD can reopen the design with rich knowledge of:
+It can represent information such as:
 
 ```text
-instances
-nets
-timing
+die/core area
+placed instances
+pins
+special nets
 routing
-layers
-parasitics
 ```
 
-## Prerequisites
+### ODB — `.odb`
 
-- [signoff checks](page_22.md)
+OpenROAD/OpenDB database representation.
 
-## Steps
+This is especially useful for reopening an implemented state in OpenROAD.
 
-### 1. Find the latest run
+### SPEF — `.spef`
 
-```bash
-RUN=$(ls -dt runs/* | head -1)
-echo "$RUN"
-```
+Extracted parasitic resistance/capacitance information.
 
-### 2. List all step directories
+Used for post-route electrical/timing analysis.
 
-```bash
-find "$RUN" -maxdepth 1 -mindepth 1 -type d \
-  -printf '%f\n' | sort
-```
+### SDF — `.sdf`
 
-### 3. Make a stage table
+Standard Delay Format.
 
-For each of these stages, find the matching directory:
+Can represent timing delays for back-annotated timing simulation or other downstream use.
+
+### SPICE — `.spice`
+
+Electrical/transistor-level netlist representation.
+
+Useful for circuit-level verification or downstream electrical analysis depending on the view.
+
+### GDSII — `.gds`
+
+Geometric mask-layout representation.
+
+This is the famous “GDS” people refer to near tapeout.
+
+It contains polygons, layers, hierarchy, and physical geometry—not your original Verilog behavior.
+
+## 2. LEF vs GDS
+
+This distinction is especially important.
+
+### LEF asks:
 
 ```text
-Yosys synthesis
+What does place-and-route need to know about this cell/block?
+```
+
+It is an abstraction.
+
+### GDS asks:
+
+```text
+What is the actual detailed layout geometry?
+```
+
+It is much more geometrically complete.
+
+Think:
+
+```text
+LEF = physical interface/obstruction abstraction
+GDS = detailed mask geometry
+```
+
+## 3. DEF vs GDS
+
+DEF is primarily an implementation exchange format for placement/routing information.
+
+GDS is a layout geometry format.
+
+A routed DEF can describe where cells and routes are, while GDS represents the detailed geometry streamed for layout/manufacturing workflows.
+
+They describe related physical reality in different ways.
+
+## 4. Inspect the final view directory
+
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+tree -L 2 "$RUN/final"
+```
+
+If `tree` is not installed:
+
+```bash
+find "$RUN/final" -maxdepth 2 -type f | sort
+```
+
+LibreLane's final directory commonly organizes views into directories such as:
+
+```text
+def/
+gds/
+lef/
+lib/
+nl/
+odb/
+pnl/
+sdc/
+sdf/
+spef/
+spice/
+```
+
+The exact set can vary.
+
+## 5. The run directory is a time machine
+
+Each flow step receives a design state and produces another state.
+
+Conceptually:
+
+```text
+state 0: RTL
+   ↓ synthesis
+state 1: netlist
+   ↓ floorplan
+state 2: floorplanned database
+   ↓ placement
+state 3: placed database
+   ↓ CTS
+state 4: clocked database
+   ↓ routing
+state 5: routed database
+   ↓ extraction/signoff
+state 6: final views
+```
+
+This means debugging does not have to be:
+
+```text
+final result is bad, guess why
+```
+
+You can ask:
+
+```text
+At what stage did the problem first appear?
+```
+
+## 6. Build a stage inventory
+
+Create:
+
+```bash
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | sort \
+  > ../reports/run_stage_inventory.txt
+```
+
+Open the file and annotate major stages in your own notes.
+
+For example:
+
+```text
+synthesis
+pre-PNR timing
 floorplan
-tap/endcap insertion
-PDN generation
-global placement
-detailed placement
+PDN
+placement
 CTS
-global routing
-detailed routing
+routing
 RC extraction
-post-PNR STA
-GDS stream-out
-DRC
-LVS
+post-route timing
+DRC/LVS
+GDS generation
 ```
 
-Write the actual folder names into your README.
+## 7. Find every ODB state
 
-### 4. Generic command to open an intermediate OpenROAD state
-
-Suppose:
+Run:
 
 ```bash
-STEP_DIR="$RUN/<step-folder>"
+find "$RUN" -type f -name '*.odb' | sort \
+  > ../reports/odb_states.txt
 ```
 
-Then:
+This shows how many physical checkpoints the flow created.
 
-```bash
-librelane \
-  --with-initial-state "$STEP_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
+You do not need to open every one.
 
-Use this repeatedly.
-
-### 5. Open detailed routing in KLayout
-
-```bash
-DRT_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*detailedrouting*' | head -1)
-
-librelane \
-  --with-initial-state "$DRT_DIR/state_out.json" \
-  --flow OpenInKLayout \
-  "$RUN/resolved.json"
-```
-
-If a GDS does not exist yet for that state, the viewer can use the physical DEF view.
-
-### 6. Open final GDS in KLayout
-
-```bash
-librelane --last-run --flow OpenInKLayout config.json
-```
-
-### 7. Open final design in OpenROAD
-
-```bash
-librelane --last-run --flow OpenInOpenROAD config.json
-```
-
-### 8. Use KLayout layer controls
-
-In KLayout:
-
-- zoom into one standard cell
-- toggle metal layers
-- toggle via layers
-- identify the PDN
-- identify signal routes
-- locate block pins
-- inspect the die boundary
-- inspect repeated standard-cell geometry
-
-At very high zoom you are no longer looking at "gates" as schematic symbols.
-
-You are looking at physical layout polygons.
-
-### 9. Do not confuse colors with electrical meaning
-
-EDA viewers assign display colors to layers.
-
-The color is a visualization choice.
-
-The **layer name and datatype** define the physical meaning.
-
-### 10. Inspect final deliverables
-
-List final files:
-
-```bash
-find "$RUN/final" -type f -printf '%p\n' | sort
-```
-
-Then answer:
+Open at least three representing clearly different stages, for example:
 
 ```text
-Which file would a parent block use for abstract placement?
-Which file contains final layout geometry?
-Which file contains parasitics?
-Which file contains delays?
-Which file contains powered connectivity?
-Which file contains timing constraints?
+floorplan-ish state
+placement/CTS-ish state
+final routed state
 ```
 
-### 11. Build a visual progression
+## 8. Create a visual progression
 
-Save one screenshot from each major stage:
+Save screenshots with names that tell a story:
 
 ```text
-01_synthesis_or_netlist.png
-02_floorplan.png
-03_pdn.png
-04_global_placement.png
-05_detailed_placement.png
-06_cts.png
-07_global_routing.png
-08_detailed_routing.png
-09_final_gds.png
+screenshots/01_floorplan.png
+screenshots/02_pdn.png
+screenshots/03_placement.png
+screenshots/04_clock_tree.png
+screenshots/05_routing.png
+screenshots/06_final_gds.png
 ```
 
-Put them in order.
+Then place them in chronological order in your final README/report.
 
-This progression is one of the best ways to understand RTL-to-GDS.
+This transforms the course from a pile of reports into a visual explanation of how a chip is constructed.
 
-## Results
+## 9. Do not infer electrical meaning from GUI color alone
 
-You should now be able to look at an arbitrary file from a digital ASIC flow and explain why it exists.
+KLayout and OpenROAD assign colors to layers for visualization.
 
-## Checklist
+A bright red shape is not “high voltage” because it is red.
 
-- [ ] Opened multiple intermediate states
-- [ ] Understand RTL vs gate-level netlist
-- [ ] Understand powered vs unpowered netlist
-- [ ] Understand LEF
-- [ ] Understand DEF
-- [ ] Understand ODB
-- [ ] Understand SPEF
-- [ ] Understand SDF
-- [ ] Understand Liberty
-- [ ] Understand SPICE
-- [ ] Understand GDSII
-- [ ] Built the visual stage progression
-- [ ] Continued to page 24
+A blue layer is not “ground” because it is blue.
 
----
+Colors are display choices.
 
-*Questions? Ask in the network Discord.*
+Use:
+
+```text
+layer names
+net names
+object properties
+PDK documentation
+```
+
+for meaning.
+
+## 10. Make a one-page format cheat sheet
+
+Create:
+
+```text
+reports/file_format_cheatsheet.md
+```
+
+containing your own short definitions for:
+
+```text
+RTL
+netlist
+SDC
+Liberty
+LEF
+DEF
+ODB
+SPEF
+SDF
+SPICE
+GDSII
+```
+
+If you can explain each in one or two sentences, you have the right level of understanding for ASIC 101.
+
+## 11. A useful mental model
+
+Think of the file formats as different questions:
+
+```text
+RTL      → what should the logic do?
+netlist  → which cells connect to which?
+SDC      → what timing must be met?
+Liberty  → how do cells behave electrically/timing-wise?
+LEF      → what does P&R need to know physically about cells/macros?
+DEF/ODB  → where is everything placed/routed right now?
+SPEF     → what parasitics did the wires create?
+GDS      → what detailed geometry will be handed downstream?
+```
+
+That mental model is more useful than memorizing extensions.
+
+## Checkpoint
+
+- [ ] you can explain the major file formats
+- [ ] you understand LEF vs GDS
+- [ ] you understand DEF/ODB vs RTL/netlist
+- [ ] you created a stage inventory
+- [ ] you found multiple ODB checkpoints
+- [ ] you created a visual progression of the design
+- [ ] you created a file-format cheat sheet
+
+## References
+
+- LibreLane architecture/states: https://librelane.readthedocs.io/en/stable/reference/architecture.html
+- LibreLane final results: https://librelane.readthedocs.io/en/stable/getting_started/newcomers/
+- OpenROAD documentation: https://openroad.readthedocs.io/
