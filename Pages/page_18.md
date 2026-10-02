@@ -1,124 +1,142 @@
-# Page 17 — Placement: decide where every standard cell goes
+# Page 18 — Clock tree synthesis: distribute time across the chip
 
 ## What you are learning
 
-After synthesis, the netlist says:
+Your RTL treats the clock almost like magic:
 
-```text
-cell A connects to cell B
-cell B connects to cell C
+```verilog
+always @(posedge clk)
 ```
 
-Placement adds coordinates:
+Every flip-flop appears to receive the same perfect clock edge.
+
+Real silicon cannot distribute a clock instantaneously.
+
+The clock is an electrical signal traveling through physical wires and buffers.
+
+**Clock Tree Synthesis (CTS)** builds that physical network.
+
+## 1. Why clocks are special
+
+The clock reaches many sequential elements.
+
+That means it can have enormous fanout in a larger design.
+
+A single tiny logic gate cannot directly drive thousands of clock pins with good edge quality.
+
+So the implementation creates a buffered clock network.
+
+Conceptually:
 
 ```text
-cell A → location (x1, y1)
-cell B → location (x2, y2)
-cell C → location (x3, y3)
+                 clk
+                  |
+             root buffer
+             /         \
+        buffer         buffer
+       /     \         /    \
+     FF       FF      FF      FF
 ```
 
-Those coordinates matter because physical distance affects routing, delay, congestion, and power.
+Real trees are much more complicated.
 
-## 1. Placement is an optimization problem
+## 2. Clock latency
 
-A placer tries to satisfy many competing goals:
+**Clock latency** is the time from the clock source/reference to when the clock edge reaches a sink.
+
+For one sink:
 
 ```text
-short wires
-low congestion
-legal density
-good timing
-routing access
-physical legality
+clock source
+    ↓
+clock buffers + wires
+    ↓
+flip-flop clock pin
 ```
 
-There is rarely one perfect placement.
+The traversal takes time.
 
-EDA tools search for a good solution.
+## 3. Clock skew
 
-## 2. Why not place all connected cells directly beside each other?
+If two flip-flops receive the same nominal clock edge at different times, the difference is **clock skew**.
 
-Because every cell is part of many constraints at once.
-
-A cell may connect to:
+Example:
 
 ```text
-several logic neighbors
-clock
-power
-I/O pins
-high-fanout nets
+FF1 clock arrives at 2.10 ns
+FF2 clock arrives at 2.24 ns
+
+skew = 0.14 ns
 ```
 
-Packing one cluster tightly may make another net impossible to route cleanly.
+The sign and effect depend on the timing relationship being analyzed.
 
-Physical design is a global optimization problem.
+The key idea is that clocks are not physically simultaneous everywhere.
 
-## 3. Global placement
+## 4. Why skew matters
 
-Global placement determines approximate cell locations while optimizing objectives such as wirelength and density.
+Timing checks compare data arrival with the clock edges that launch and capture that data.
 
-At this stage, cells may not yet be perfectly legal on the placement grid.
+Clock arrival differences therefore change the timing budget.
 
-Think:
+Poor clock distribution can create or worsen:
 
 ```text
-find good neighborhoods
+setup problems
+hold problems
 ```
 
-rather than:
+## 5. Setup intuition
+
+For a simple register-to-register path:
 
 ```text
-snap every cell to its final exact site
+launch FF
+   ↓
+combinational logic
+   ↓
+capture FF
 ```
 
-## 4. Detailed placement
+The data must arrive early enough before the capture edge to satisfy the capture register's setup requirement.
 
-Detailed placement legalizes the design.
-
-Cells are moved onto valid sites and overlaps are removed while trying not to destroy the quality of global placement.
-
-Think:
+A simplified mental model is:
 
 ```text
-turn the approximate solution into a physically legal one
+available cycle time
+>
+clock-to-Q + data-path delay + setup requirement
 ```
 
-## 5. Why wirelength matters
+Clock skew and uncertainty modify the real equation.
 
-Long wires tend to create more parasitic resistance and capacitance.
+## 6. Hold intuition
 
-That can increase:
+Hold asks a different question:
 
 ```text
-delay
-dynamic power
-routing resource usage
+Does the new data change too soon after the capture clock edge?
 ```
 
-Shortening important connections is therefore valuable.
+Very short data paths can cause hold problems.
 
-But shortest-total-wirelength is not the only objective.
+This surprises many beginners because “faster logic” sounds universally good.
 
-## 6. What is congestion?
+It is not.
 
-Routing resources are finite.
-
-Imagine a city where ten highways all need to pass through the same narrow corridor.
-
-The physical-design equivalent is routing congestion.
-
-Too many nets competing for too few tracks can cause:
+A design can fail because a path is:
 
 ```text
-detours
-longer wires
-timing degradation
-routing failure
-DRC problems
+too slow for setup
 ```
 
-## 7. Find placement stages
+or:
+
+```text
+too fast for hold
+```
+
+## 7. Find the CTS stage
 
 Run:
 
@@ -127,12 +145,10 @@ cd ~/asic_101/asic
 RUN="$(ls -dt runs/*/ | head -1)"
 
 find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
-  | grep -Ei 'placement|globalplacement|detailedplacement|gpl|dpl'
+  | grep -Ei 'cts|clock'
 ```
 
-The names may vary slightly by LibreLane release.
-
-## 8. Inspect the final placement
+## 8. Inspect the clock network
 
 Open OpenROAD:
 
@@ -140,103 +156,86 @@ Open OpenROAD:
 librelane --last-run --flow OpenInOpenROAD config.json
 ```
 
-Zoom into the cell rows.
+Try to select or highlight the `clk` net.
 
-Individual standard cells should appear as many small rectangles packed along legal rows.
+Depending on the GUI and version, you may be able to trace the buffered clock tree visually.
 
-Try selecting or highlighting instances.
+Look for repeated clock-buffer structures feeding sequential elements.
 
-Notice that the physical design contains more than the neat conceptual blocks from your RTL.
+## 9. Compare cell types before and after CTS
 
-## 9. Why did extra cells appear?
+Because CTS inserts clock buffers, the design's cell count can increase.
 
-Physical implementation can insert cells that were not explicitly described in your RTL.
-
-Examples include:
+This is a useful lesson:
 
 ```text
-buffers
-clock buffers
-filler cells
-tap cells
-endcaps
-diode/antenna-repair structures
+synthesis cell count ≠ final physical cell count
 ```
 
-Some optimize timing or electrical behavior.
+Physical implementation modifies the netlist for physical reasons.
 
-Others satisfy physical/manufacturing requirements.
+## 10. Why a balanced tree is not perfectly balanced
 
-That is normal.
+Real geometry is irregular.
 
-## 10. Placement changes timing before routing is even finished
+Clock sinks are at different coordinates.
 
-Suppose a path is:
+Different branches have different:
 
 ```text
-FF1 → logic A → logic B → FF2
+wire lengths
+loads
+buffer choices
+parasitics
 ```
 
-If the cells are placed close together, the wires can be shorter.
+CTS attempts to manage latency and skew, but zero skew everywhere is not a realistic expectation.
 
-If they are spread across the block, net delay can grow.
+## 11. Clock trees consume power
 
-That is why timing optimization does not stop after synthesis.
+The clock switches every cycle.
 
-## 11. Density is local, not only global
+That means its buffers and wires toggle continuously while the design is active.
 
-A design may have low average utilization and still have one congested hotspot.
+Clock networks can therefore represent a significant fraction of dynamic power in large synchronous chips.
 
-For example:
+This is one reason clock gating exists in more advanced low-power design.
 
-```text
-left half: mostly empty
-right corner: extremely dense
-```
+ASIC 101 does not need to implement clock gating, but you should understand why clocks are expensive.
 
-Average utilization alone cannot describe local routability.
-
-This is why placement tools use density and congestion maps.
-
-## 12. Save placement evidence
+## 12. Save CTS evidence
 
 Save:
 
 ```text
-screenshots/placement.png
+screenshots/clock_tree.png
 ```
 
-If OpenROAD provides a useful congestion or density heatmap for your run, save an additional image:
+Create:
 
 ```text
-screenshots/placement_heatmap.png
-```
-
-Then create:
-
-```text
-reports/page17_placement_notes.md
+reports/page18_cts_notes.md
 ```
 
 Answer:
 
-1. What is the difference between global and detailed placement?
-2. Why does placement affect timing?
-3. What is routing congestion?
-4. Why can physical design insert buffers that are absent from your RTL?
-5. Why can low average utilization still contain a local hotspot?
+1. Why can one source not simply drive every clock pin directly?
+2. What is clock latency?
+3. What is clock skew?
+4. What is the conceptual difference between setup and hold timing?
+5. Why can CTS increase both area and power?
 
 ## Checkpoint
 
-- [ ] you understand global vs detailed placement
-- [ ] you understand why placement affects wirelength and delay
-- [ ] you understand congestion conceptually
-- [ ] you found the placement stages
-- [ ] you inspected standard-cell locations
-- [ ] you know why extra cells may appear after physical optimization
-- [ ] you saved placement evidence
+- [ ] you know why CTS exists
+- [ ] you can define clock latency
+- [ ] you can define clock skew
+- [ ] you understand setup vs hold at an intuitive level
+- [ ] you found the CTS stage
+- [ ] you inspected the clock network
+- [ ] you saved CTS evidence
 
 ## References
 
-- OpenROAD global placement: https://openroad.readthedocs.io/
-- OpenROAD detailed placement: https://openroad.readthedocs.io/
+- OpenROAD CTS documentation: https://openroad.readthedocs.io/
+- LibreLane timing-closure guide: https://librelane.readthedocs.io/en/stable/usage/timing_closure/
