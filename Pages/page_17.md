@@ -1,244 +1,242 @@
-# Placement: where the standard cells physically go
+# Page 17 — Placement: decide where every standard cell goes
 
-Placement assigns physical coordinates to the synthesized standard cells while trying to satisfy wirelength, density, routability, and timing goals.
+## What you are learning
 
-## Overview
-
-Before placement, the netlist says:
+After synthesis, the netlist says:
 
 ```text
 cell A connects to cell B
 cell B connects to cell C
 ```
 
-but it does not say:
+Placement adds coordinates:
 
 ```text
-cell A is at x=43.2 µm, y=71.4 µm
+cell A → location (x1, y1)
+cell B → location (x2, y2)
+cell C → location (x3, y3)
 ```
 
-Placement creates those coordinates.
+Those coordinates matter because physical distance affects routing, delay, congestion, and power.
 
-### Global placement
+## 1. Placement is an optimization problem
 
-Global placement finds good approximate locations.
-
-Cells may not yet be perfectly legal on placement sites.
-
-It tries to optimize objectives such as:
+A placer tries to satisfy many competing goals:
 
 ```text
-wirelength
-density
-routability
-sometimes timing
+short wires
+low congestion
+legal density
+good timing
+routing access
+physical legality
 ```
 
-### Detailed placement
+There is rarely one perfect placement.
 
-Detailed placement legalizes cells:
+EDA tools search for a good solution.
+
+## 2. Why not place all connected cells directly beside each other?
+
+Because every cell is part of many constraints at once.
+
+A cell may connect to:
 
 ```text
-inside legal rows
-on legal sites
-without illegal overlaps
-```
-
-while trying not to destroy the global-placement solution.
-
-### Why placement affects timing
-
-Wire delay depends on physical distance and load.
-
-A net that was "just a wire" in RTL may become:
-
-```text
-a long RC interconnect
-```
-
-in silicon.
-
-Moving connected cells closer can reduce wire delay and capacitance.
-
-### Why placement affects routing
-
-If too many nets need the same region:
-
-```text
-routing demand > routing capacity
-```
-
-and congestion appears.
-
-## Prerequisites
-
-- [PDN](page_16.md)
-
-## Steps
-
-### 1. Find global placement
-
-```bash
-RUN=$(ls -dt runs/* | head -1)
-
-GPL_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*openroad-globalplacement' | tail -1)
-
-echo "$GPL_DIR"
-```
-
-There may be an earlier `globalplacementskipio` stage.
-
-For this page use the later main global-placement state when available.
-
-### 2. Open global placement in OpenROAD
-
-```bash
-librelane \
-  --with-initial-state "$GPL_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
-
-### 3. Identify cell clusters
-
-Zoom in.
-
-Try to distinguish:
-
-```text
-flip-flops
-combinational cells
-buffers
-physical-only cells
-```
-
-Use instance selection/properties in the GUI.
-
-### 4. Find detailed placement
-
-```bash
-DPL_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*detailedplacement*' | head -1)
-
-echo "$DPL_DIR"
-```
-
-Open it:
-
-```bash
-librelane \
-  --with-initial-state "$DPL_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
-
-### 5. Compare global vs detailed placement
-
-Look for:
-
-- cells snapped to rows
-- overlap removal
-- local movement
-- row alignment
-
-### 6. Open heatmaps
-
-In OpenROAD GUI, inspect available heatmaps such as:
-
-```text
-placement density
-routing congestion
-power/IR-drop views if available for the state
-```
-
-A heatmap converts a huge physical dataset into spatial information.
-
-For congestion:
-
-```text
-hot region
-= lots of routing demand relative to capacity
-```
-
-### 7. Understand density
-
-If placement is too dense:
-
-```text
-cells compete for routing access
-buffers have nowhere to go
-routing detours increase
-timing can worsen
-```
-
-If placement is too sparse:
-
-```text
-die/core becomes larger
-wirelength can grow
-area efficiency decreases
-```
-
-The goal is not maximum density.
-
-The goal is a design that closes:
-
-```text
-timing
-routing
+several logic neighbors
+clock
 power
-physical verification
+I/O pins
+high-fanout nets
 ```
 
-at acceptable area.
+Packing one cluster tightly may make another net impossible to route cleanly.
 
-### 8. Inspect optimization cells
+Physical design is a global optimization problem.
 
-Physical design may insert or resize cells that were not obvious in the original RTL:
+## 3. Global placement
+
+Global placement determines approximate cell locations while optimizing objectives such as wirelength and density.
+
+At this stage, cells may not yet be perfectly legal on the placement grid.
+
+Think:
+
+```text
+find good neighborhoods
+```
+
+rather than:
+
+```text
+snap every cell to its final exact site
+```
+
+## 4. Detailed placement
+
+Detailed placement legalizes the design.
+
+Cells are moved onto valid sites and overlaps are removed while trying not to destroy the quality of global placement.
+
+Think:
+
+```text
+turn the approximate solution into a physically legal one
+```
+
+## 5. Why wirelength matters
+
+Long wires tend to create more parasitic resistance and capacitance.
+
+That can increase:
+
+```text
+delay
+dynamic power
+routing resource usage
+```
+
+Shortening important connections is therefore valuable.
+
+But shortest-total-wirelength is not the only objective.
+
+## 6. What is congestion?
+
+Routing resources are finite.
+
+Imagine a city where ten highways all need to pass through the same narrow corridor.
+
+The physical-design equivalent is routing congestion.
+
+Too many nets competing for too few tracks can cause:
+
+```text
+detours
+longer wires
+timing degradation
+routing failure
+DRC problems
+```
+
+## 7. Find placement stages
+
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'placement|globalplacement|detailedplacement|gpl|dpl'
+```
+
+The names may vary slightly by LibreLane release.
+
+## 8. Inspect the final placement
+
+Open OpenROAD:
+
+```bash
+librelane --last-run --flow OpenInOpenROAD config.json
+```
+
+Zoom into the cell rows.
+
+Individual standard cells should appear as many small rectangles packed along legal rows.
+
+Try selecting or highlighting instances.
+
+Notice that the physical design contains more than the neat conceptual blocks from your RTL.
+
+## 9. Why did extra cells appear?
+
+Physical implementation can insert cells that were not explicitly described in your RTL.
+
+Examples include:
 
 ```text
 buffers
-stronger/slower drive variants
-timing repair cells
+clock buffers
+filler cells
+tap cells
+endcaps
+diode/antenna-repair structures
 ```
 
-This is normal.
+Some optimize timing or electrical behavior.
 
-The physical netlist evolves during implementation.
+Others satisfy physical/manufacturing requirements.
 
-### 9. Save screenshots
+That is normal.
+
+## 10. Placement changes timing before routing is even finished
+
+Suppose a path is:
+
+```text
+FF1 → logic A → logic B → FF2
+```
+
+If the cells are placed close together, the wires can be shorter.
+
+If they are spread across the block, net delay can grow.
+
+That is why timing optimization does not stop after synthesis.
+
+## 11. Density is local, not only global
+
+A design may have low average utilization and still have one congested hotspot.
+
+For example:
+
+```text
+left half: mostly empty
+right corner: extremely dense
+```
+
+Average utilization alone cannot describe local routability.
+
+This is why placement tools use density and congestion maps.
+
+## 12. Save placement evidence
 
 Save:
 
 ```text
-screenshots/global_placement.png
-screenshots/detailed_placement.png
-screenshots/congestion_heatmap.png
+screenshots/placement.png
 ```
 
-## Results
+If OpenROAD provides a useful congestion or density heatmap for your run, save an additional image:
 
-Record:
+```text
+screenshots/placement_heatmap.png
+```
 
-| placement item | observation |
-|----------------|-------------|
-| Placement density | |
-| Visible whitespace | |
-| Congestion hotspots | |
-| Added buffers visible | |
-| Legalized rows | yes/no |
+Then create:
 
-## Checklist
+```text
+reports/page17_placement_notes.md
+```
 
-- [ ] Understand global placement
-- [ ] Understand detailed placement
-- [ ] Can see legal standard-cell rows
-- [ ] Can explain why density is not simply "higher is better"
-- [ ] Inspected congestion
-- [ ] Saved placement screenshots
-- [ ] Continued to page 18
+Answer:
 
----
+1. What is the difference between global and detailed placement?
+2. Why does placement affect timing?
+3. What is routing congestion?
+4. Why can physical design insert buffers that are absent from your RTL?
+5. Why can low average utilization still contain a local hotspot?
 
-*Questions? Ask in the network Discord.*
+## Checkpoint
+
+- [ ] you understand global vs detailed placement
+- [ ] you understand why placement affects wirelength and delay
+- [ ] you understand congestion conceptually
+- [ ] you found the placement stages
+- [ ] you inspected standard-cell locations
+- [ ] you know why extra cells may appear after physical optimization
+- [ ] you saved placement evidence
+
+## References
+
+- OpenROAD global placement: https://openroad.readthedocs.io/
+- OpenROAD detailed placement: https://openroad.readthedocs.io/
