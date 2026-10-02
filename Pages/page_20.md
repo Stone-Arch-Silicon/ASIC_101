@@ -1,277 +1,310 @@
-# Parasitics and static timing analysis
+# Page 20 — Parasitics and static timing analysis
 
-After routing, the wires are no longer abstract connections. Their physical geometry creates resistance and capacitance that must be extracted and included in timing analysis.
+## What you are learning
 
-## Overview
+A routed wire is not ideal.
 
-An RTL wire looks ideal:
+It has electrical behavior.
 
-```verilog
-wire carry;
-```
+After routing, the tools can estimate that behavior from the physical geometry and perform much more realistic timing analysis.
 
-A silicon interconnect behaves more like a distributed electrical network containing:
+This page connects three ideas:
 
 ```text
-resistance
-capacitance
-coupling
-driver resistance
-receiver capacitance
+physical wires
+→ parasitic RC
+→ timing delay
 ```
 
-Longer wires generally mean more parasitic effects.
+## 1. What are parasitics?
 
-### RC extraction
+In ideal RTL, a wire has no delay.
 
-OpenRCX extracts physical interconnect parasitics from the routed design.
+In real silicon, interconnect has unwanted but unavoidable electrical properties.
 
-These may be written into:
+The two most important introductory effects are:
+
+```text
+R = resistance
+C = capacitance
+```
+
+Together they contribute to signal delay and transition behavior.
+
+## 2. Why long wires are usually more expensive
+
+A longer wire generally contains more physical material and interacts with more surrounding conductor area.
+
+That tends to increase parasitic effects.
+
+Therefore placement and routing can change performance even when the logical Boolean function is identical.
+
+## 3. What OpenRCX does
+
+LibreLane uses parasitic extraction tooling such as OpenRCX to estimate interconnect resistance and capacitance from the routed design.
+
+The extracted information can be represented in files such as:
 
 ```text
 SPEF
 ```
 
-files.
+SPEF stands for **Standard Parasitic Exchange Format**.
 
-SPEF stands for Standard Parasitic Exchange Format.
+You do not need to read a full SPEF by hand.
 
-### Static Timing Analysis
+You need to understand what it represents.
 
-STA analyzes timing mathematically without applying every possible simulation vector.
+## 4. Find the SPEF files
 
-For each timing path it uses:
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+find "$RUN/final" -type f -name '*.spef' | sort
+```
+
+You may see more than one file because timing can be analyzed under multiple corners.
+
+## 5. What is a timing corner?
+
+Transistor and wire behavior changes with operating and manufacturing conditions.
+
+Timing analysis therefore considers different **corners**.
+
+A PVT corner describes:
 
 ```text
+Process
+Voltage
+Temperature
+```
+
+For example, SKY130 timing libraries include characterized conditions representing different process speeds, voltages, and temperatures.
+
+Interconnect extraction can also have minimum/nominal/maximum RC assumptions.
+
+The point is not to trust one perfect “delay number.”
+
+The implementation must be considered under relevant operating conditions.
+
+## 6. What Static Timing Analysis does
+
+**Static Timing Analysis (STA)** checks timing paths mathematically without requiring you to simulate every possible input vector.
+
+STA knows things such as:
+
+```text
+clock constraints
 cell delays
-wire parasitics
-clock timing
-constraints
-slew
-load
-PVT corner
+wire delays
+setup requirements
+hold requirements
+clock arrival times
 ```
 
-to calculate arrival and required times.
+It propagates timing information through the design and checks whether constraints are met.
 
-### Slack
+## 7. Four useful timing-path categories
 
-Simplified:
+A timing path can conceptually be:
 
 ```text
-slack = required arrival time - actual arrival time
+input  → output
+input  → register
+register → output
+register → register
 ```
 
-For setup:
+For ASIC 101, the registered `alu_top` gives you meaningful register-to-register paths through the ALU logic.
+
+## 8. Slack
+
+Slack is one of the most important numbers in digital timing.
+
+Conceptually:
 
 ```text
-positive slack = passes
-zero slack     = exactly at limit
-negative slack = violation
+slack = required time - actual arrival time
 ```
 
-## Prerequisites
-
-- [routing](page_19.md)
-
-## Steps
-
-### 1. Find RC extraction
-
-```bash
-RUN=$(ls -dt runs/* | head -1)
-
-RCX_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*openroad-rcx*' | head -1)
-
-echo "$RCX_DIR"
-```
-
-Inspect output files:
-
-```bash
-find "$RCX_DIR" -maxdepth 2 -type f -printf '%p\n' | sort
-```
-
-### 2. Find SPEF
-
-```bash
-find "$RUN" -type f -iname '*.spef' | head -20
-```
-
-Do not try to manually understand an entire SPEF file.
-
-Open the beginning:
-
-```bash
-SPEF=$(find "$RUN" -type f -iname '*.spef' | head -1)
-head -80 "$SPEF"
-```
-
-Notice:
+For a setup check:
 
 ```text
-nets
-capacitances
-resistances
-connections
+positive slack → requirement met
+zero slack     → exactly on the boundary
+negative slack → timing violation
 ```
 
-### 3. Find post-PNR STA
+Do not confuse a positive number with “the path delay.”
 
-```bash
-STA_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*stapostpnr*' | head -1)
+Slack is the **margin relative to a requirement**.
 
-echo "$STA_DIR"
-```
+## 9. Worst Negative Slack and Total Negative Slack
 
-List reports:
+Two common summary concepts are:
 
-```bash
-find "$STA_DIR" -type f -printf '%p\n' | sort
-```
+### WNS — Worst Negative Slack
 
-### 4. Open the timing summary
+The worst single timing margin.
 
-Look for:
+If the worst path has:
 
 ```text
-summary.rpt
+slack = -0.35 ns
 ```
 
-For example:
+then timing is violated by 0.35 ns on that path.
+
+### TNS — Total Negative Slack
+
+A summary of negative slack across violating endpoints/paths according to the reporting methodology.
+
+WNS tells you about the worst offender.
+
+TNS gives a sense of how widespread timing failure is.
+
+## 10. Find timing-related stages and reports
+
+Run:
 
 ```bash
-cat "$STA_DIR/summary.rpt"
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'sta|timing|rcx|spef'
 ```
 
-Record:
-
-- worst setup slack
-- worst hold slack
-- total negative setup slack
-- total negative hold slack if reported
-- violating endpoints
-- corner
-
-### 5. Inspect the worst setup path
-
-Search the corner reports:
+Then search text reports for slack:
 
 ```bash
-grep -Rni "slack" "$STA_DIR" | head -100
+grep -Rni --include='*.rpt' --include='*.log' 'slack' "$RUN" | head -80
 ```
 
-Open the report containing the worst max/setup timing path.
+Report organization can change between releases, so searching by concept is more durable than memorizing one path.
 
-Identify:
+## 11. Read one timing path
+
+Find a detailed setup or hold report and identify:
 
 ```text
-launch register
-logic cells
-net delays
-capture register
-clock arrival information
-final slack
+Startpoint
+Endpoint
+Path Type
+individual cell/net delays
+data arrival time
+data required time
+slack
 ```
 
-### 6. Inspect the worst hold path
+You do not need to understand every line yet.
 
-Find the min/hold report.
+Trace the path as a story:
 
-Notice that the worst hold path may be very short.
+```text
+clock launches data
+→ data passes through cells and wires
+→ data reaches the destination
+→ timing tool compares arrival against requirement
+```
 
-That is expected.
+## 12. Cell delay vs net delay
 
-Hold analysis asks whether data changes **too early**.
-
-### 7. Understand cell delay vs net delay
-
-A timing path is not just logic gates.
+A timing path is not only gates.
 
 It contains:
 
 ```text
-cell delay + interconnect delay
+cell delay
++
+interconnect/net delay
 ```
 
-After route, net delay can become a major part of the critical path.
+This is why a logically elegant design can still perform poorly after bad physical placement or routing.
 
-This is one reason post-route STA is more meaningful than an RTL-level timing guess.
+## 13. What is the critical path?
 
-### 8. Understand timing corners
+For setup timing, the critical path is typically the path with the smallest setup slack.
 
-A design should be checked across the PVT/interconnect corners configured by the PDK.
-
-Different corners can dominate:
+In your ALU it may involve:
 
 ```text
-setup
-hold
-slew
-power
+input register
+→ arithmetic logic
+→ ALU result selection
+→ output register
 ```
 
-Do not assume the same corner is worst for everything.
+Do not assume the ripple-carry chain is automatically the final critical path.
 
-### 9. Open timing paths graphically
+Synthesis and physical implementation may restructure the logic.
 
-Open final OpenROAD:
+**Measure the implemented design.**
 
-```bash
-librelane --last-run --flow OpenInOpenROAD config.json
-```
+## 14. Timing closure
 
-Use the timing-path viewer to inspect the worst path spatially.
+Timing closure means iterating the design and physical implementation until required timing constraints are satisfied.
 
-Ask:
+Possible changes include:
 
 ```text
-Is it physically long?
-Does it cross the ALU?
-Is most delay cell delay or net delay?
-Does it contain buffering?
+RTL architecture
+pipelining
+cell sizing
+buffering
+placement
+routing
+clock tree
+floorplan
+constraints
 ```
 
-### 10. Save evidence
+A production design can require many iterations.
 
-Save:
+## 15. Save timing evidence
+
+Create:
 
 ```text
-screenshots/worst_setup_path.png
-screenshots/worst_hold_path.png
+reports/page20_timing_notes.md
 ```
-
-## Results
 
 Record:
 
-| timing metric | result |
-|---------------|-------:|
-| Clock period | |
-| Worst setup slack | |
-| Total negative setup slack | |
-| Worst hold slack | |
-| Setup-violating endpoints | |
-| Hold-violating endpoints | |
-| Worst setup corner | |
-| Worst hold corner | |
-| Critical path startpoint | |
-| Critical path endpoint | |
+```text
+clock period
+clock frequency
+worst setup slack
+worst hold slack
+critical-path startpoint
+critical-path endpoint
+major logic/cells on the critical path
+```
 
-## Checklist
+If timing is violated, do **not** hide it.
 
-- [ ] Found SPEF
-- [ ] Understand resistance and capacitance parasitics
-- [ ] Found post-route STA
-- [ ] Recorded worst setup slack
-- [ ] Recorded worst hold slack
-- [ ] Inspected the worst timing path
-- [ ] Understand cell delay vs net delay
-- [ ] Understand multi-corner analysis
-- [ ] Continued to page 21
+Write:
 
----
+```text
+TIMING VIOLATION PRESENT
+```
 
-*Questions? Ask in the network Discord.*
+and explain where.
+
+That is better engineering than pretending the run is clean.
+
+## Checkpoint
+
+- [ ] you understand parasitic R and C
+- [ ] you found SPEF output
+- [ ] you know what a PVT corner represents
+- [ ] you can define STA
+- [ ] you can define slack
+- [ ] you understand setup and hold are separate checks
+- [ ] you identified one real timing path from the implementation
+- [ ] you recorded timing evidence and any violations
+
+## References
+
+- LibreLane timing corners: https://librelane.readthedocs.io/en/stable/usage/timing_corners.html
+- LibreLane timing closure: https://librelane.readthedocs.io/en/stable/usage/timing_closure/
