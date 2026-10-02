@@ -1,300 +1,511 @@
-# Optimize the design and compare the adder architectures
+# Page 24 — Engineering experiment: compare three adder architectures fairly
 
-Now repeat the flow as an engineering experiment. Compare the Ripple Carry, Carry Lookahead, and Carry Select versions using the same process, clock constraint, floorplan methodology, and reporting method.
+## What you are learning
 
-## Overview
+You began ASIC 101 with a ripple-carry adder because it is easy to derive and verify from first principles.
 
-A fair comparison changes **one primary design variable at a time**.
-
-For the adder experiment:
+Now you finally have enough background to ask a more interesting engineering question:
 
 ```text
-same ALU
+Does a different adder architecture produce a better physical ASIC implementation?
+```
+
+This is where carry lookahead and carry select belong.
+
+Not as early branches that beginners copy without context, but as a **controlled architecture experiment**.
+
+## 1. The rule of a fair comparison
+
+Change one primary variable at a time.
+
+For this experiment, keep constant:
+
+```text
+same ALU behavior
 same top-level registers
+same testbench expectations
 same PDK
 same standard-cell library
-same clock period
-same physical constraints
-same tool flow
-different adder RTL
+same clock target
+same floorplan
+same LibreLane version
+same physical-design settings
 ```
 
-Then compare:
+Change only:
 
 ```text
-area
-timing
-power estimate
-wirelength
-cell count
-buffer count
-routing
-congestion
+adder architecture
 ```
 
-### Why FPGA results and ASIC results can disagree
+Then compare the resulting implementation.
 
-An FPGA has:
+## 2. Architecture A — Ripple Carry Adder
+
+This is your baseline from Part 1.
+
+Conceptually:
 
 ```text
-LUTs
-dedicated carry chains
-fixed routing architecture
-fixed programmable resources
+bit 0 carry
+   ↓
+bit 1 carry
+   ↓
+bit 2 carry
+   ↓
+...
+   ↓
+bit 7 carry
 ```
 
-An ASIC has:
+Its strength is simplicity.
+
+Its weakness is a potentially long serial carry dependency.
+
+## 3. Architecture B — Block Carry Lookahead Adder
+
+Carry lookahead introduces **propagate** and **generate** signals.
+
+For bit `i`:
 
 ```text
-standard cells
-custom placement
-custom routing
-different wire RC
-different cell choices
+p[i] = a[i] XOR b[i]
+g[i] = a[i] AND b[i]
 ```
 
-An architecture that performs well on an FPGA is not guaranteed to rank the same way in an ASIC.
+The carry recurrence is:
 
-## Prerequisites
+```text
+c[i+1] = g[i] OR (p[i] AND c[i])
+```
 
-- [inspection and file formats](page_23.md)
-- one complete clean baseline run
+Instead of implementing every carry as a strictly serial full-adder chain, lookahead expands carry conditions so logic can evaluate more of the dependency in parallel.
 
-## Steps
+For ASIC 101, use two 4-bit lookahead blocks.
 
-### 1. Create three design copies
+Create a separate variant file, for example:
+
+```text
+rtl_variants/cla/adder8.v
+```
+
+with:
+
+```verilog
+module cla4 (
+  input  wire [3:0] a,
+  input  wire [3:0] b,
+  input  wire       cin,
+  output wire [3:0] sum,
+  output wire       cout
+);
+
+  wire [3:0] p;
+  wire [3:0] g;
+  wire [4:0] c;
+
+  assign p = a ^ b;
+  assign g = a & b;
+
+  assign c[0] = cin;
+
+  assign c[1] = g[0] | (p[0] & c[0]);
+
+  assign c[2] = g[1] | (p[1] & g[0]) | (p[1] & p[0] & c[0]);
+
+  assign c[3] = g[2] | (p[2] & g[1]) | (p[2] & p[1] & g[0]) | (p[2] & p[1] & p[0] & c[0]);
+
+  assign c[4] = g[3] | (p[3] & g[2]) | (p[3] & p[2] & g[1]) | (p[3] & p[2] & p[1] & g[0]) | (p[3] & p[2] & p[1] & p[0] & c[0]);
+
+  assign sum = p ^ c[3:0];
+  assign cout = c[4];
+
+endmodule
+
+module adder8 (
+  input  wire [7:0] a,
+  input  wire [7:0] b,
+  input  wire       cin,
+  output wire [7:0] sum,
+  output wire       cout
+);
+
+  wire carry4;
+
+  cla4 u_low (
+    .a    (a[3:0]),
+    .b    (b[3:0]),
+    .cin  (cin),
+    .sum  (sum[3:0]),
+    .cout (carry4)
+  );
+
+  cla4 u_high (
+    .a    (a[7:4]),
+    .b    (b[7:4]),
+    .cin  (carry4),
+    .sum  (sum[7:4]),
+    .cout (cout)
+  );
+
+endmodule
+```
+
+This is **block carry lookahead**, not one giant fully expanded 8-bit lookahead equation.
+
+## 4. Architecture C — Carry Select Adder
+
+Carry select trades extra hardware for reduced waiting on a later carry.
+
+The idea is:
+
+```text
+compute upper result assuming carry-in = 0
+compute upper result assuming carry-in = 1
+when real carry arrives, select the correct result
+```
+
+That duplicates some arithmetic hardware.
+
+Create:
+
+```text
+rtl_variants/carry_select/adder8.v
+```
+
+One simple implementation is:
+
+```verilog
+module ripple4 (
+  input  wire [3:0] a,
+  input  wire [3:0] b,
+  input  wire       cin,
+  output wire [3:0] sum,
+  output wire       cout
+);
+
+  wire [4:0] c;
+  assign c[0] = cin;
+
+  genvar i;
+  generate
+    for (i = 0; i < 4; i = i + 1) begin : GEN_FA
+      assign sum[i] = a[i] ^ b[i] ^ c[i];
+      assign c[i+1] = (a[i] & b[i]) | (a[i] & c[i]) | (b[i] & c[i]);
+    end
+  endgenerate
+
+  assign cout = c[4];
+
+endmodule
+
+module adder8 (
+  input  wire [7:0] a,
+  input  wire [7:0] b,
+  input  wire       cin,
+  output wire [7:0] sum,
+  output wire       cout
+);
+
+  wire       c4;
+
+  wire [3:0] upper_sum_c0;
+  wire [3:0] upper_sum_c1;
+  wire       upper_cout_c0;
+  wire       upper_cout_c1;
+
+  ripple4 u_low (
+    .a    (a[3:0]),
+    .b    (b[3:0]),
+    .cin  (cin),
+    .sum  (sum[3:0]),
+    .cout (c4)
+  );
+
+  ripple4 u_upper_c0 (
+    .a    (a[7:4]),
+    .b    (b[7:4]),
+    .cin  (1'b0),
+    .sum  (upper_sum_c0),
+    .cout (upper_cout_c0)
+  );
+
+  ripple4 u_upper_c1 (
+    .a    (a[7:4]),
+    .b    (b[7:4]),
+    .cin  (1'b1),
+    .sum  (upper_sum_c1),
+    .cout (upper_cout_c1)
+  );
+
+  assign sum[7:4] = c4 ? upper_sum_c1  : upper_sum_c0;
+  assign cout     = c4 ? upper_cout_c1 : upper_cout_c0;
+
+endmodule
+```
+
+## 5. Never compare unverified variants
+
+Before physical implementation, every architecture must pass the **same functional testbench**.
+
+That means the exhaustive ALU test from Page 9 should pass unchanged.
+
+Do not create special expected values for one architecture.
+
+The whole point is:
+
+```text
+same function
+three implementations
+```
+
+## 6. Organize the experiment cleanly
+
+Create:
+
+```text
+asic_101/
+├── rtl/
+│   ├── adder8.v              # baseline ripple version
+│   ├── alu_core.v
+│   └── alu_top.v
+├── rtl_variants/
+│   ├── ripple/
+│   │   └── adder8.v
+│   ├── cla/
+│   │   └── adder8.v
+│   └── carry_select/
+│       └── adder8.v
+└── asic_variants/
+    ├── ripple/
+    ├── cla/
+    └── carry_select/
+```
+
+Copy your baseline ripple adder into:
+
+```text
+rtl_variants/ripple/adder8.v
+```
+
+## 7. Give each variant its own LibreLane configuration
+
+The easiest reproducible approach is one design directory per variant.
 
 For example:
 
 ```text
-experiments/
-├── ripple/
-├── lookahead/
-└── carry_select/
+asic_variants/ripple/config.json
+asic_variants/cla/config.json
+asic_variants/carry_select/config.json
 ```
 
-Each folder should use the appropriate `adder8.v`.
+Each should keep the same settings.
 
-### 2. Keep the baseline configuration identical
+Only the path to `adder8.v` changes.
 
-Use the same:
+For the CLA version, for example:
 
-```text
-CLOCK_PERIOD
-PDK
-STD_CELL_LIBRARY
-DIE_AREA
-CORE_AREA
-placement density
-flow version
+```json
+{
+  "DESIGN_NAME": "alu_top",
+
+  "VERILOG_FILES": [
+    "dir::../../rtl_variants/cla/adder8.v",
+    "dir::../../rtl/alu_core.v",
+    "dir::../../rtl/alu_top.v"
+  ],
+
+  "CLOCK_PORT": "clk",
+  "CLOCK_PERIOD": 10.0,
+
+  "PDK": "sky130A",
+  "STD_CELL_LIBRARY": "sky130_fd_sc_hd",
+
+  "FP_SIZING": "absolute",
+  "DIE_AREA": [0, 0, 150, 150],
+  "CORE_AREA": [10, 10, 140, 140],
+
+  "FP_CORE_UTIL": 35,
+  "PL_TARGET_DENSITY_PCT": 45
+}
 ```
 
-for the first comparison.
+## 8. Run all three under the same environment
 
-Do not secretly give one architecture more area.
-
-### 3. Run all three
-
-Example:
+Inside the same Nix shell and without changing tool versions:
 
 ```bash
-cd experiments/ripple
-librelane config.json
-
-cd ../lookahead
-librelane config.json
-
-cd ../carry_select
-librelane config.json
+librelane ~/asic_101/asic_variants/ripple/config.json
+librelane ~/asic_101/asic_variants/cla/config.json
+librelane ~/asic_101/asic_variants/carry_select/config.json
 ```
 
-### 4. Record synthesis results
+If one fails, record the failure.
 
-For each version, record:
+Do not secretly change only that variant's density or floorplan and then call the comparison fair.
+
+If a common setting must change for routability, rerun **all three** with that same changed setting.
+
+## 9. Build the comparison table
+
+Create:
 
 ```text
-mapped cell count
-estimated cell area
-major cell types
+reports/adder_architecture_comparison.md
 ```
 
-### 5. Record physical results
+with:
 
-For each version:
+```markdown
+| Metric | Ripple | CLA | Carry Select |
+|---|---:|---:|---:|
+| Functional verification | | | |
+| Clock constraint | 10 ns | 10 ns | 10 ns |
+| Cell count | | | |
+| Standard-cell area | | | |
+| Worst setup slack | | | |
+| Worst hold slack | | | |
+| Estimated power | | | |
+| Routed wirelength | | | |
+| Buffer count | | | |
+| DRC status | | | |
+| LVS status | | | |
+| Final flow status | | | |
+```
+
+Use the actual metrics available in your LibreLane version.
+
+## 10. Do not assume the textbook winner
+
+You may expect:
 
 ```text
-standard-cell area
-die/core area
-utilization
-wirelength
-buffer count
+ripple = smallest but slowest
+carry select = larger but faster
+carry lookahead = faster carry logic
 ```
 
-### 6. Record timing
+Those are useful architectural intuitions.
 
-For each version:
+But your actual 8-bit synthesized results may not follow the stereotype cleanly.
+
+Why?
+
+Because:
 
 ```text
-worst setup slack
-worst hold slack
-critical path
-critical-path corner
+8 bits is tiny
+synthesis can rewrite logic
+standard-cell choices matter
+wire delay matters
+physical placement matters
+mux delay matters
+library cells differ
 ```
 
-### 7. Record power
+The correct answer is the implemented evidence.
 
-Use the same analysis assumptions for all three.
+## 11. Inspect the critical path for each design
 
-Record the power categories reported by the flow.
+For every architecture, record:
 
-Relative comparison is much more meaningful when the methodology is identical.
+```text
+critical-path startpoint
+critical-path endpoint
+major cell sequence
+cell delay contribution
+net delay contribution
+```
 
-### 8. Record signoff quality
+Then ask:
 
-Do not rank a design with violations above a clean design just because one PPA number looks attractive.
+```text
+Did changing the adder actually change the critical path?
+```
+
+It may not.
+
+Perhaps the output mux or another part of the ALU dominates.
+
+That is precisely why physical implementation is valuable.
+
+## 12. Optional experiment: tighten the clock
+
+After the fair 10 ns comparison is complete, you can explore timing limits.
+
+Try a common tighter period for all three, for example:
+
+```text
+8 ns
+6 ns
+4 ns
+```
+
+Do **not** blindly assume each will route successfully.
 
 Record:
 
 ```text
-DRC
-LVS
-antenna
-setup
-hold
-routing violations
+which constraints close
+where failures begin
+how area/buffering changes
+whether congestion appears
 ```
 
-### 9. Build the comparison table
+This turns the project into an actual architecture study.
 
-```markdown
-| metric | Ripple | Lookahead | Carry Select |
-|--------|-------:|----------:|-------------:|
-| Mapped cells | | | |
-| Standard-cell area | | | |
-| Core area | | | |
-| Utilization | | | |
-| Wirelength | | | |
-| Worst setup slack | | | |
-| Worst hold slack | | | |
-| Power estimate | | | |
-| Worst IR drop | | | |
-| DRC clean | | | |
-| LVS clean | | | |
-```
+## 13. Optional experiment: shrink the floorplan
 
-### 10. Explain the result physically
+You can also reduce the common die/core dimensions and rerun all three.
 
-Do not stop at:
+This explores:
 
 ```text
-Lookahead was faster.
-```
-
-Explain:
-
-```text
-what did synthesis map?
-what is the critical path?
-how many cells were inserted?
-what happened to wirelength?
-did routing become harder?
-did the architecture survive optimization?
-```
-
-### 11. Experiment with utilization
-
-After the fair baseline comparison, pick **one** adder and vary floorplan size or utilization methodology.
-
-For example, compare:
-
-```text
-roomy core
-moderate core
-tight core
-```
-
-Do not choose values that make the design trivially impossible.
-
-Observe:
-
-```text
-cell density
+area pressure
+utilization
 congestion
-wirelength
-timing
-area
+routability
+timing tradeoffs
 ```
 
-### 12. Experiment with clock period
+Again, use identical physical constraints across designs.
 
-Try a more aggressive clock target.
+## 14. Your engineering conclusion must explain *why*
 
-Example progression:
+Do not finish with:
 
 ```text
-10 ns
-8 ns
-6 ns
+CLA got 0.7 ns better slack.
 ```
 
-Do not assume the tool will close timing.
+Explain what physically changed.
 
-The point is to find where implementation becomes difficult and understand why.
-
-### 13. Optional synthesis exploration
-
-LibreLane provides a synthesis-exploration flow that can try multiple synthesis strategies.
-
-Use:
-
-```bash
-librelane --flow SynthesisExploration config.json
-```
-
-Treat this as an optimization experiment after you understand the baseline.
-
-### 14. Keep reproducibility information
-
-Save:
+A strong conclusion discusses evidence such as:
 
 ```text
-resolved.json
-metrics.csv
-metrics.json
-tool version
-PDK version
+cell count
+logic depth
+critical path
+buffering
+wire delay
+muxing
+placement
+routing
 ```
 
-for each run.
+## Checkpoint
 
-If another student cannot reproduce your comparison, it is not a strong engineering comparison.
+- [ ] all three adders implement the same interface
+- [ ] all three pass the same functional verification
+- [ ] all three use the same PDK/library/tool environment
+- [ ] all three use the same clock and physical constraints
+- [ ] you collected comparable PPA and signoff metrics
+- [ ] you inspected the critical path for all three
+- [ ] you wrote a physical explanation, not only a numeric ranking
+- [ ] any extra clock/floorplan experiment was applied fairly to every design
 
-## Results
+## References
 
-Your conclusion should answer:
-
-1. Which adder used the least cell area?
-2. Which had the best setup timing?
-3. Which had the most routing/wirelength?
-4. Which used the most estimated power?
-5. Did the original RTL structure remain recognizable?
-6. Did the ranking match your Vivado/FPGA result?
-7. What tradeoff would you choose for a real design?
-
-## Checklist
-
-- [ ] Ran all three adder architectures
-- [ ] Used identical baseline physical constraints
-- [ ] Compared cell area
-- [ ] Compared timing
-- [ ] Compared power
-- [ ] Compared wirelength
-- [ ] Compared signoff status
-- [ ] Performed one density/area experiment
-- [ ] Performed one clock-period experiment
-- [ ] Wrote a physical explanation, not only a ranking
-- [ ] Continued to page 25
-
----
-
-*Questions? Ask in the network Discord.*
+- LibreLane synthesis exploration/timing tools: https://librelane.readthedocs.io/en/stable/reference/flows.html
+- LibreLane timing closure: https://librelane.readthedocs.io/en/stable/usage/timing_closure/
