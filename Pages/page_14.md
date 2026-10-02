@@ -1,217 +1,290 @@
-# Synthesis: turn RTL into standard cells
+# Page 14 — Synthesis again, but now with real SKY130 standard cells
 
-Synthesis converts the behavioral RTL into a gate-level network and maps that network onto cells from the Sky130 standard-cell library.
+## What you are learning
 
-## Overview
+On Page 10 you synthesized the ALU with Yosys to learn what synthesis means.
 
-Start with RTL:
+Now LibreLane has synthesized it **for a real technology library**.
+
+That difference is fundamental.
+
+Generic synthesis asks:
+
+```text
+What Boolean/sequential structure implements the RTL?
+```
+
+Technology mapping asks:
+
+```text
+Which cells that actually exist in this process should implement that structure?
+```
+
+## 1. From abstract logic to library cells
+
+Your RTL may contain:
 
 ```verilog
-always @(posedge clk) begin
-  a_q <= a;
-end
+assign p = a ^ b;
 ```
 
-After synthesis, the design contains an actual library flip-flop cell.
+The source code does not say what transistor layout should implement XOR.
 
-Start with:
-
-```verilog
-assign y = a ^ b;
-```
-
-After synthesis, the logic may become:
-
-- XOR cells
-- NAND/NOR combinations
-- AOI/OAI cells
-- mux cells
-- some other equivalent network
-
-Synthesis is allowed to transform logic as long as the resulting circuit is logically equivalent under the design constraints.
-
-### Three conceptual synthesis phases
+The SKY130 standard-cell library provides already-designed physical cells for functions such as:
 
 ```text
-RTL elaboration
-→ generic Boolean/sequential network
-→ technology mapping
+inverters
+buffers
+NAND
+NOR
+AND
+OR
+XOR
+multiplexers
+flip-flops
+clock buffers
 ```
 
-### Why your adder source may not survive literally
+After technology mapping, your netlist contains instances with names from the selected library.
 
-You chose an architecture such as:
+You may see names beginning with:
 
 ```text
-Ripple Carry
-Carry Lookahead
-Carry Select
+sky130_fd_sc_hd__
 ```
 
-That architecture expresses your RTL intent.
+## 2. Find the synthesis step
 
-Yosys and its technology-mapping passes may:
-
-- flatten hierarchy
-- propagate constants
-- simplify Boolean expressions
-- remove redundant logic
-- remap functions
-- resize/restructure logic later in PNR
-
-Therefore:
-
-> compare the implemented results, not just the number of operators you typed.
-
-## Prerequisites
-
-- [baseline run complete](page_13.md)
-
-## Steps
-
-### 1. Locate the synthesis step
-
-Find it without relying on a hard-coded step number:
+Set the run variable again if you opened a new shell:
 
 ```bash
-RUN=$(ls -dt runs/* | head -1)
-find "$RUN" -maxdepth 1 -type d -name '*yosys-synthesis*'
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
 ```
 
-Store the directory:
+Search the stage names:
 
 ```bash
-SYNTH_DIR=$(find "$RUN" -maxdepth 1 -type d -name '*yosys-synthesis*' | head -1)
-echo "$SYNTH_DIR"
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'yosys|synth'
 ```
 
-### 2. Inspect synthesis output files
+You may see multiple synthesis-related stages.
+
+That is normal.
+
+Do not rely on one hard-coded numeric prefix.
+
+## 3. Find the final gate-level netlist
+
+The final directory is usually the easiest stable place to begin:
 
 ```bash
-find "$SYNTH_DIR" -maxdepth 1 -type f -printf '%f\n' | sort
+find "$RUN/final" -type f \( -name '*.v' -o -name '*.nl.v' -o -name '*.pnl.v' \) | sort
 ```
 
-Look for:
+The exact file naming depends on the view.
+
+A file ending in something like:
 
 ```text
-log files
-netlists
-reports
-state_out.json
+.nl.v
 ```
 
-### 3. Search the mapped netlist for Sky130 cells
+is a logical gate-level netlist.
 
-```bash
-grep -R "sky130_fd_sc_hd__" "$SYNTH_DIR" | head -40
+A physical netlist may include explicit power connections and use a name such as:
+
+```text
+.pnl.v
 ```
 
-You should see standard-cell instance names.
+## 4. Search for SKY130 cells
 
-### 4. Count cell-name occurrences
-
-This is only a rough text-level exploration, not the authoritative area report:
+Choose the final synthesized/physical netlist and run something like:
 
 ```bash
-grep -Rho "sky130_fd_sc_hd__[A-Za-z0-9_]*" "$SYNTH_DIR" \
+grep -o 'sky130_fd_sc_hd__[A-Za-z0-9_]*' <NETLIST_FILE> \
   | sort \
   | uniq -c \
   | sort -nr \
   | head -30
 ```
 
-Later OpenROAD/metrics reports provide more reliable physical counts and area.
+Replace `<NETLIST_FILE>` with the actual path you found.
 
-### 5. Find the synthesis statistics
+You should see a count of cell names.
 
-Search:
+For example, the design may contain classes of cells corresponding to:
 
-```bash
-grep -RniE "area|cells|wires|ABC|stat" "$SYNTH_DIR" | head -80
+```text
+flip-flops
+muxes
+inverters
+NAND/NOR gates
+XOR/XNOR gates
+buffers
 ```
 
-Look at the Yosys log and identify:
+Your exact mapping may differ with tool versions and optimization settings.
 
-- number of cells
-- cell types
-- sequential elements
-- combinational elements
-- area estimate if reported
+## 5. A standard-cell name contains information
 
-### 6. Compare RTL and netlist
+A name such as:
+
+```text
+sky130_fd_sc_hd__buf_2
+```
+
+can be read conceptually as:
+
+```text
+sky130              process family
+fd_sc               foundry digital standard cell
+hd                  high-density library
+buf                 buffer function
+2                   drive-strength variant
+```
+
+Do not memorize every naming convention.
+
+The important point is that synthesis is now choosing **real cells with real characterized timing and physical dimensions**.
+
+## 6. Why are there multiple drive strengths?
+
+A tiny inverter driving one nearby gate does not need the same transistor size as a buffer driving a large fanout.
+
+A stronger cell can usually drive more capacitance or transition faster, but it often costs:
+
+```text
+more area
+more input capacitance
+more power
+```
+
+Physical-design optimization is full of tradeoffs like this.
+
+## 7. Look for your registers
+
+Your `alu_top` contains input and output registers.
+
+Therefore the mapped design should contain sequential cells.
+
+Search the cell count for names that correspond to flip-flops.
+
+Do not worry if the exact cell type is different from what you expected.
+
+Synthesis and optimization are allowed to choose equivalent cells.
+
+## 8. Why source hierarchy may disappear
+
+You wrote modules such as:
+
+```text
+alu_top
+alu_core
+adder8
+```
+
+but after optimization the physical netlist may not preserve that hierarchy cleanly.
+
+The tools may:
+
+```text
+flatten modules
+propagate constants
+merge equivalent logic
+rewrite Boolean equations
+resize cells
+insert buffers
+```
+
+The contract is functional equivalence under the design constraints—not source-code prettiness.
+
+## 9. Synthesis statistics are only the beginning
+
+At this stage, you can count cells.
+
+But a cell count alone does **not** tell you final ASIC area or performance.
+
+Why?
+
+Because physical design has not yet been fully considered in a cell count.
+
+Real timing depends on:
+
+```text
+cell delay
+wire length
+wire resistance
+wire capacitance
+fanout
+buffering
+clock arrival
+PVT corner
+```
+
+Real physical area also includes:
+
+```text
+cell footprints
+spacing
+power structures
+routing resources
+physical-only cells
+```
+
+## 10. Compare generic Yosys output with ASIC-mapped output
+
+Open both:
+
+```text
+~/asic_101/build/alu_top_synth.v
+```
+
+from Page 10 and the mapped netlist from LibreLane.
 
 Ask:
 
-```text
-Can I still recognize the adder hierarchy?
-Did synthesis flatten it?
-What cell implements the input/output registers?
-Are there explicit XOR cells?
-Are there mux cells?
-Were some operations combined?
-```
+1. Which one contains SKY130 cell names?
+2. Which one is process-independent?
+3. Which one can be connected to characterized SKY130 timing models?
+4. Which one is much closer to something that can be physically placed?
 
-### 7. Understand the clock before CTS
-
-At this stage the design has clocked cells, but the **physical clock tree has not been built yet**.
-
-Synthesis knows:
+Write a short answer in:
 
 ```text
-these flip-flops are driven by clk
+reports/page14_synthesis_notes.md
 ```
 
-It does not yet know the final physical clock-buffer locations and routed clock wires.
+## 11. Save synthesis evidence
 
-### 8. Understand area at this stage
+Create a compact cell summary:
 
-Synthesis area is mainly:
-
-```text
-sum of standard-cell areas
+```bash
+grep -o 'sky130_fd_sc_hd__[A-Za-z0-9_]*' <NETLIST_FILE> \
+  | sort \
+  | uniq -c \
+  | sort -nr \
+  > ../reports/sky130_cell_counts.txt
 ```
 
-It is **not** final die area.
+Do not worry if physical-design stages later add more buffers or special cells.
 
-Final physical area also needs:
+That is part of the lesson.
 
-- whitespace
-- placement rows
-- tap/endcap cells
-- clock buffers
-- routing resources
-- PDN
-- physical margins
-- possibly decap/filler cells
+## Checkpoint
 
-### 9. Save evidence
+- [ ] you can explain generic synthesis vs technology mapping
+- [ ] you found a gate-level SKY130 netlist
+- [ ] you found `sky130_fd_sc_hd__...` cell instances
+- [ ] you identified at least one sequential cell class
+- [ ] you understand that multiple drive strengths trade area/power for electrical strength
+- [ ] you understand why source hierarchy can change
+- [ ] you saved a cell-count summary
 
-Save a short text excerpt or screenshot showing mapped Sky130 cells:
+## References
 
-```text
-screenshots/synthesis_cells.png
-```
-
-## Results
-
-You should now understand the boundary:
-
-```text
-RTL describes function
-synthesis chooses a gate-level implementation
-physical design assigns real positions and wires
-```
-
-## Checklist
-
-- [ ] Located the Yosys synthesis step
-- [ ] Found a mapped netlist
-- [ ] Found Sky130 standard-cell names
-- [ ] Identified flip-flop cells
-- [ ] Inspected synthesis statistics
-- [ ] Understand why RTL architecture and final physical implementation may differ
-- [ ] Continued to page 15
-
----
-
-*Questions? Ask in the network Discord.*
+- Yosys: https://yosyshq.readthedocs.io/
+- LibreLane PDKs and standard cells: https://librelane.readthedocs.io/en/stable/usage/about_pdks.html
+- SKY130 standard-cell documentation: https://skywater-pdk.readthedocs.io/
