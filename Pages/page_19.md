@@ -1,221 +1,269 @@
-# Routing: turn nets into metal and vias
+# Page 19 — Routing: turn logical nets into legal metal and vias
 
-Routing creates the physical metal shapes that electrically connect the placed cells.
+## What you are learning
 
-## Overview
+Placement gives cells coordinates.
 
-Placement gives each pin a location.
+But the pins are not electrically connected until metal is routed between them.
 
-Routing must connect pins through legal metal tracks while obeying:
+Routing transforms:
+
+```text
+logical connectivity
+```
+
+into:
+
+```text
+physical conductive geometry
+```
+
+## 1. A net becomes geometry
+
+At RTL:
+
+```verilog
+wire carry;
+```
+
+At the logical netlist level:
+
+```text
+output pin of cell A
+connects to
+input pin of cell B
+```
+
+After detailed routing, that connection becomes a physical path containing:
+
+```text
+metal segments
+tracks
+vias
+layer changes
+```
+
+## 2. Routing layers
+
+A modern process contains multiple metal layers.
+
+The layers are stacked vertically above the transistors.
+
+Conceptually:
+
+```text
+upper metal
+-----------
+metal
+-----------
+metal
+-----------
+lower metal
+-----------
+transistors
+```
+
+Different layers can have different:
+
+```text
+preferred directions
+width rules
+spacing rules
+resistance
+capacitance
+allowed uses
+```
+
+## 3. Preferred directions
+
+Routing systems often encourage alternating preferred directions between adjacent layers.
+
+For example, one layer may favor horizontal routes while the next favors vertical routes.
+
+Conceptually:
+
+```text
+M2: horizontal
+M3: vertical
+M4: horizontal
+M5: vertical
+```
+
+Do not treat that exact sequence as universal.
+
+The PDK defines the real rules.
+
+The important idea is that layer structure helps organize a massive routing problem.
+
+## 4. Global routing
+
+Global routing decides approximate paths and resource usage.
+
+Think:
+
+```text
+this net should travel through these routing regions
+```
+
+It is concerned with capacity and congestion before assigning every exact shape.
+
+## 5. Detailed routing
+
+Detailed routing assigns legal physical tracks, wires, and vias.
+
+Now the tool must obey manufacturing constraints such as:
 
 ```text
 minimum width
 minimum spacing
-via rules
-routing-layer rules
+via enclosure
+routing-grid legality
 obstructions
-capacity
-antenna constraints
+minimum area
 ```
 
-### Global routing
+This is where an approximate routing plan becomes actual mask geometry.
 
-Global routing decides approximate paths and routing regions.
+## 6. Find routing stages
 
-Think:
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'route|routing|grt|drt|antenna'
+```
+
+You should see global- and detailed-routing-related work as well as antenna-related checks or repair.
+
+## 7. Inspect routing in OpenROAD
+
+Open:
+
+```bash
+librelane --last-run --flow OpenInOpenROAD config.json
+```
+
+Use layer visibility controls.
+
+Try this sequence:
 
 ```text
-which corridors and layers should this net use?
+show all routing layers
+hide upper layers
+show only one or two layers
+show vias
+highlight one signal net
 ```
 
-It estimates congestion and creates routing guides.
+The purpose is to train your eye to separate layers instead of seeing one giant colored picture.
 
-### Detailed routing
+## 8. Inspect routing in KLayout
 
-Detailed routing assigns actual legal tracks, segments, and vias.
+Open:
 
-Think:
+```bash
+librelane --last-run --flow OpenInKLayout config.json
+```
+
+KLayout shows the final geometric representation extremely well.
+
+Toggle layers one at a time.
+
+Notice that one electrical connection may move through several layers using vias.
+
+## 9. What happens in congestion?
+
+If too many nets compete for a region, detailed routing may need to:
 
 ```text
-exactly which metal shape goes where?
+detour
+change layers
+add vias
+lengthen wires
 ```
 
-### Preferred routing directions
+Those detours can worsen timing and power.
 
-Metal layers often have preferred horizontal or vertical routing directions.
+Severe congestion can prevent clean routing altogether.
 
-Alternating directions makes multi-layer routing manageable.
+That is why placement quality and floorplan density matter.
 
-Do not assume every wire stays on one layer.
+## 10. What is an antenna violation?
 
-### Vias
+During fabrication, long pieces of partially constructed interconnect can collect electrical charge before all connections are complete.
 
-Whenever a routed connection changes metal layers, a via provides the vertical electrical connection.
+That charge can potentially damage thin transistor gate oxides.
 
-### Congestion
+This manufacturing issue is known as the **antenna effect**.
 
-Congestion occurs when too many nets compete for limited routing resources.
+Antenna checking asks whether routing geometry violates process antenna rules.
 
-The router may respond by:
-
-- detouring
-- changing layers
-- moving through less congested regions
-
-Long detours add wirelength and parasitic RC.
-
-## Prerequisites
-
-- [clock tree synthesis](page_18.md)
-
-## Steps
-
-### 1. Find global routing
-
-```bash
-RUN=$(ls -dt runs/* | head -1)
-
-GRT_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*globalrouting*' | head -1)
-
-echo "$GRT_DIR"
-```
-
-### 2. Open global-routing state
-
-```bash
-librelane \
-  --with-initial-state "$GRT_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
-
-Inspect congestion/route guides if available in the GUI.
-
-### 3. Find detailed routing
-
-```bash
-DRT_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*detailedrouting*' | head -1)
-
-echo "$DRT_DIR"
-```
-
-Open it:
-
-```bash
-librelane \
-  --with-initial-state "$DRT_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
-
-### 4. Toggle metal layers
-
-Turn layers on and off individually.
-
-Observe that:
-
-- one layer tends to carry one direction
-- another carries the other direction
-- vias connect them
-
-### 5. Follow one signal
-
-Select a net such as one output bit or an internal arithmetic net.
-
-Trace it across:
+Repair may involve techniques such as:
 
 ```text
-driver pin
-wire segment
-via
-another metal layer
-sink pin
+routing changes
+layer hopping
+antenna diodes
 ```
 
-### 6. Inspect the clock route
+depending on the flow and process.
 
-Compare the clock network with ordinary signal nets.
+This is a great example of a problem that is almost invisible at the RTL level.
 
-The clock may use different routing behavior or layer constraints than general signals.
+## 11. Routing creates the parasitics that timing must analyze
 
-### 7. Check total wirelength
+Before routing, a net is largely an abstract connection.
 
-The Classic flow includes wirelength reporting.
+After routing, it has real geometry.
 
-Search:
-
-```bash
-find "$RUN" -maxdepth 1 -type d -iname '*wirelength*'
-```
-
-and:
-
-```bash
-grep -RniE "wire|length" "$RUN"/*wirelength* 2>/dev/null | head -80
-```
-
-### 8. Understand antenna violations
-
-During fabrication, long unconnected metal structures can accumulate charge during plasma processing.
-
-That charge can damage thin transistor gate oxides.
-
-This is the **antenna effect**.
-
-The flow checks antenna properties and may repair violations using methods such as:
-
-- routing changes
-- antenna diodes
-
-Antenna rules are manufacturing rules, not logical RTL rules.
-
-### 9. Inspect detailed-routing DRC
-
-Detailed routing also checks routing-rule violations.
-
-Search:
-
-```bash
-grep -RniE "violation|drc|error" "$DRT_DIR" | head -100
-```
-
-### 10. Save screenshots
-
-Save:
+That geometry creates:
 
 ```text
-screenshots/global_routing.png
-screenshots/detailed_routing.png
-screenshots/metal_layers.png
+resistance
+capacitance
+coupling effects
 ```
 
-## Results
+The next page extracts those effects and feeds them into timing analysis.
 
-Record:
+## 12. Save routing evidence
 
-| routing item | value/observation |
-|--------------|------------------:|
-| Total wirelength | |
-| Routing congestion | |
-| Detailed-route violations | |
-| Antenna violations before repair | |
-| Antenna violations after repair | |
-| Lowest signal routing layer | |
-| Highest signal routing layer | |
+Save at least two screenshots:
 
-## Checklist
+```text
+screenshots/routing_all_layers.png
+screenshots/routing_few_layers.png
+```
 
-- [ ] Understand global routing
-- [ ] Understand detailed routing
-- [ ] Can identify metal wires
-- [ ] Can identify vias
-- [ ] Inspected multiple metal layers
-- [ ] Understand congestion
-- [ ] Understand antenna effect
-- [ ] Continued to page 20
+Create:
 
----
+```text
+reports/page19_routing_notes.md
+```
 
-*Questions? Ask in the network Discord.*
+Answer:
+
+1. What is the difference between global and detailed routing?
+2. What is a via?
+3. Why do routing layers have rules and preferred directions?
+4. How can congestion hurt timing?
+5. What is the antenna effect at a high level?
+
+## Checkpoint
+
+- [ ] you understand global vs detailed routing
+- [ ] you understand metal layers and vias
+- [ ] you found routing-related stages
+- [ ] you inspected routing in OpenROAD
+- [ ] you inspected final geometry in KLayout
+- [ ] you know what an antenna violation represents
+- [ ] you saved routing screenshots and notes
+
+## References
+
+- OpenROAD global routing: https://openroad.readthedocs.io/
+- OpenROAD detailed routing: https://openroad.readthedocs.io/
+- SKY130 PDK documentation: https://skywater-pdk.readthedocs.io/
