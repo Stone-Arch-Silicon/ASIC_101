@@ -1,187 +1,242 @@
-# Clock tree synthesis: build the physical clock network
+# Page 17 — Placement: decide where every standard cell goes
 
-Clock Tree Synthesis, or CTS, turns the logical clock connection into a physical network designed to reach every sequential element with controlled delay and skew.
+## What you are learning
 
-## Overview
-
-Before CTS, the netlist conceptually says:
+After synthesis, the netlist says:
 
 ```text
-clk → every flip-flop
+cell A connects to cell B
+cell B connects to cell C
 ```
 
-A single ideal driver cannot physically drive a large chip.
-
-Real clock routing has:
+Placement adds coordinates:
 
 ```text
-wire resistance
-wire capacitance
-sink capacitance
-buffer delay
-different path lengths
+cell A → location (x1, y1)
+cell B → location (x2, y2)
+cell C → location (x3, y3)
 ```
 
-CTS inserts a tree of clock buffers.
+Those coordinates matter because physical distance affects routing, delay, congestion, and power.
 
-Conceptually:
+## 1. Placement is an optimization problem
+
+A placer tries to satisfy many competing goals:
 
 ```text
-             clk
-              |
-          clock buffer
-          /          \
-      buffer        buffer
-      /   \          /   \
-    FF    FF       FF    FF
+short wires
+low congestion
+legal density
+good timing
+routing access
+physical legality
 ```
 
-### Clock latency
+There is rarely one perfect placement.
 
-Clock latency is the time required for the clock edge to travel from its source to a sink.
+EDA tools search for a good solution.
 
-### Clock skew
+## 2. Why not place all connected cells directly beside each other?
 
-Clock skew is the difference in clock arrival time between sinks.
+Because every cell is part of many constraints at once.
 
-If:
+A cell may connect to:
 
 ```text
-FF_A clock arrives at 1.0 ns
-FF_B clock arrives at 1.2 ns
+several logic neighbors
+clock
+power
+I/O pins
+high-fanout nets
 ```
 
-then the difference is:
+Packing one cluster tightly may make another net impossible to route cleanly.
+
+Physical design is a global optimization problem.
+
+## 3. Global placement
+
+Global placement determines approximate cell locations while optimizing objectives such as wirelength and density.
+
+At this stage, cells may not yet be perfectly legal on the placement grid.
+
+Think:
 
 ```text
-0.2 ns
+find good neighborhoods
 ```
 
-Skew affects setup and hold timing.
+rather than:
 
-### Why clocks receive special treatment
+```text
+snap every cell to its final exact site
+```
 
-The clock controls when state changes.
+## 4. Detailed placement
 
-Clock quality affects essentially every register-to-register timing path in the block.
+Detailed placement legalizes the design.
 
-## Prerequisites
+Cells are moved onto valid sites and overlaps are removed while trying not to destroy the quality of global placement.
 
-- [placement](page_17.md)
+Think:
 
-## Steps
+```text
+turn the approximate solution into a physically legal one
+```
 
-### 1. Find the CTS step
+## 5. Why wirelength matters
+
+Long wires tend to create more parasitic resistance and capacitance.
+
+That can increase:
+
+```text
+delay
+dynamic power
+routing resource usage
+```
+
+Shortening important connections is therefore valuable.
+
+But shortest-total-wirelength is not the only objective.
+
+## 6. What is congestion?
+
+Routing resources are finite.
+
+Imagine a city where ten highways all need to pass through the same narrow corridor.
+
+The physical-design equivalent is routing congestion.
+
+Too many nets competing for too few tracks can cause:
+
+```text
+detours
+longer wires
+timing degradation
+routing failure
+DRC problems
+```
+
+## 7. Find placement stages
+
+Run:
 
 ```bash
-RUN=$(ls -dt runs/* | head -1)
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
 
-CTS_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*openroad-cts*' | head -1)
-
-echo "$CTS_DIR"
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'placement|globalplacement|detailedplacement|gpl|dpl'
 ```
 
-### 2. Open the post-CTS design
+The names may vary slightly by LibreLane release.
+
+## 8. Inspect the final placement
+
+Open OpenROAD:
 
 ```bash
-librelane \
-  --with-initial-state "$CTS_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
+librelane --last-run --flow OpenInOpenROAD config.json
 ```
 
-### 3. Highlight the clock net
+Zoom into the cell rows.
 
-Use OpenROAD's GUI to select or search for:
+Individual standard cells should appear as many small rectangles packed along legal rows.
+
+Try selecting or highlighting instances.
+
+Notice that the physical design contains more than the neat conceptual blocks from your RTL.
+
+## 9. Why did extra cells appear?
+
+Physical implementation can insert cells that were not explicitly described in your RTL.
+
+Examples include:
 
 ```text
-clk
+buffers
+clock buffers
+filler cells
+tap cells
+endcaps
+diode/antenna-repair structures
 ```
 
-Trace the network.
+Some optimize timing or electrical behavior.
 
-Look for clock buffers added by CTS.
+Others satisfy physical/manufacturing requirements.
 
-### 4. Compare pre-CTS and post-CTS cell counts
+That is normal.
 
-Compare an earlier placement state with the CTS state.
+## 10. Placement changes timing before routing is even finished
 
-CTS normally increases the number of cells because it inserts clock-tree elements.
-
-### 5. Find clock reports
-
-Search the CTS and later STA directories:
-
-```bash
-grep -RniE "skew|latency|clock" "$CTS_DIR" | head -100
-```
-
-Later multi-corner STA reports may provide more complete clock information.
-
-### 6. Understand insertion delay
-
-The clock at a register is not an ideal zero-delay event.
-
-The tree contributes real delay.
-
-This is why post-CTS timing is more physically realistic than pre-CTS timing.
-
-### 7. Setup intuition
-
-For a simplified register-to-register path:
+Suppose a path is:
 
 ```text
-launch FF
-→ combinational logic
-→ capture FF
+FF1 → logic A → logic B → FF2
 ```
 
-the data must arrive early enough before the capture clock edge.
+If the cells are placed close together, the wires can be shorter.
 
-A setup violation means the data path is too slow for the required cycle after accounting for clock timing and constraints.
+If they are spread across the block, net delay can grow.
 
-### 8. Hold intuition
+That is why timing optimization does not stop after synthesis.
 
-Data must not change too soon after the capture clock edge.
+## 11. Density is local, not only global
 
-A hold violation is dangerous because simply lowering clock frequency does not automatically fix it.
+A design may have low average utilization and still have one congested hotspot.
 
-Hold is about **minimum delay**, not maximum cycle time.
+For example:
 
-### 9. Save evidence
+```text
+left half: mostly empty
+right corner: extremely dense
+```
+
+Average utilization alone cannot describe local routability.
+
+This is why placement tools use density and congestion maps.
+
+## 12. Save placement evidence
 
 Save:
 
 ```text
-screenshots/clock_tree.png
+screenshots/placement.png
 ```
 
-Try to make the highlighted clock network visible.
+If OpenROAD provides a useful congestion or density heatmap for your run, save an additional image:
 
-## Results
+```text
+screenshots/placement_heatmap.png
+```
 
-Record:
+Then create:
 
-| CTS item | value/observation |
-|----------|------------------:|
-| Clock period | |
-| Clock buffers inserted | |
-| Reported skew | |
-| Clock latency/insertion delay | |
-| Post-CTS setup status | |
-| Post-CTS hold status | |
+```text
+reports/page17_placement_notes.md
+```
 
-## Checklist
+Answer:
 
-- [ ] Understand CTS
-- [ ] Understand clock latency
-- [ ] Understand clock skew
-- [ ] Can visually identify the clock network
-- [ ] Understand setup vs hold at a high level
-- [ ] Saved clock-tree screenshot
-- [ ] Continued to page 19
+1. What is the difference between global and detailed placement?
+2. Why does placement affect timing?
+3. What is routing congestion?
+4. Why can physical design insert buffers that are absent from your RTL?
+5. Why can low average utilization still contain a local hotspot?
 
----
+## Checkpoint
 
-*Questions? Ask in the network Discord.*
+- [ ] you understand global vs detailed placement
+- [ ] you understand why placement affects wirelength and delay
+- [ ] you understand congestion conceptually
+- [ ] you found the placement stages
+- [ ] you inspected standard-cell locations
+- [ ] you know why extra cells may appear after physical optimization
+- [ ] you saved placement evidence
+
+## References
+
+- OpenROAD global placement: https://openroad.readthedocs.io/
+- OpenROAD detailed placement: https://openroad.readthedocs.io/
