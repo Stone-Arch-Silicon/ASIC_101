@@ -28,3 +28,16 @@ The project used throughout the course is an **8-bit arithmetic logic unit (ALU)
 - **KLayout / Magic / Netgen** — layout viewing and physical verification tools used later in the course
 
 The easiest installation path is **OSS CAD Suite**, a distribution of open-source digital-design tools maintained by YosysHQ.
+
+## Summary
+ - Basic Digital Logic...................1 - 6
+ - Build and Simulate the 8-bit ALU......7 - 9
+ - Synthesis with Yosys.................10 - 11
+ - LibreLane RTL-GDSII Flow.............12 - 13 
+ - Synthesis with SKY130................14
+ - Physical Design......................15 - 22
+ - File formats.........................23
+ - Other Adders.........................24
+ - Final submission.....................25
+
+Feel free to skip pages 1 - 6 if you have any digital logic background!
