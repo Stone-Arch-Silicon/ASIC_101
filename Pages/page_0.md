@@ -27,4 +27,4 @@ The project used throughout the course is an **8-bit arithmetic logic unit (ALU)
 - **SKY130** — open PDK used for the ASIC implementation
 - **KLayout / Magic / Netgen** — layout viewing and physical verification tools used later in the course
 
-For the first ten pages, the easiest installation path is **OSS CAD Suite**, a distribution of open-source digital-design tools maintained by YosysHQ.
+The easiest installation path is **OSS CAD Suite**, a distribution of open-source digital-design tools maintained by YosysHQ.
