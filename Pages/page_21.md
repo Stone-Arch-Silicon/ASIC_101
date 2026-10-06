@@ -1,16 +1,10 @@
-# Power, performance, area, and efficiency
+# Page 21 — Power, performance, and area: read the implementation like an engineer
 
-A physical design is not judged by one number. Power, performance, area, routability, and correctness interact, and improving one can make another worse.
+## What you are learning
 
-## Overview
+A chip is rarely optimized for one number.
 
-The common shorthand is:
-
-```text
-PPA
-```
-
-meaning:
+Engineers usually reason about tradeoffs between:
 
 ```text
 Power
@@ -18,16 +12,120 @@ Performance
 Area
 ```
 
-### Power
+often shortened to:
 
-Digital power is often discussed as:
+```text
+PPA
+```
+
+This page teaches you to build a defensible PPA summary without pretending that estimates are measurements.
+
+## 1. Area
+
+For a hardened block, useful area-related quantities include:
+
+```text
+die area
+core area
+standard-cell area
+utilization
+cell count
+```
+
+These are related but not interchangeable.
+
+### Die area
+
+Using the baseline configuration:
+
+```text
+150 µm × 150 µm = 22,500 µm²
+```
+
+That is the deliberately oversized teaching boundary.
+
+### Core area
+
+Using:
+
+```text
+[10, 10, 140, 140]
+```
+
+the core dimensions are approximately:
+
+```text
+130 µm × 130 µm = 16,900 µm²
+```
+
+Again, this is not saying the logic intrinsically needs that much area.
+
+It is the floorplan we gave it.
+
+### Cell area
+
+Cell area is the sum of standard-cell physical footprints according to the implementation.
+
+This is much closer to the actual area occupied by logic cells than counting Verilog lines.
+
+## 2. Performance
+
+For a synchronous block, one obvious performance constraint is the clock period.
+
+Our baseline target is:
+
+```text
+10 ns = 100 MHz
+```
+
+But you cannot simply claim:
+
+```text
+performance = 100 MHz
+```
+
+unless timing actually closes at that period.
+
+A constraint is a request.
+
+Timing reports tell you whether the implementation met the request.
+
+## 3. Estimating a maximum frequency
+
+If a design is timed at a period `T_constraint` and the worst setup slack is `S`, a rough educational estimate of the limiting period is:
+
+```text
+T_limit ≈ T_constraint - S
+```
+
+Be careful with signs.
+
+Example:
+
+```text
+constraint = 10.0 ns
+WNS       = +2.0 ns
+
+rough limiting period ≈ 8.0 ns
+rough frequency ≈ 125 MHz
+```
+
+This is an approximation for intuition, not a substitute for rerunning timing at the tighter constraint.
+
+For a real result, tighten the clock constraint and rerun the flow.
+
+## 4. Power
+
+Digital power is often divided into two broad categories:
 
 ```text
 dynamic power
 static/leakage power
 ```
 
-A common intuition for switching power is:
+### Dynamic power
+
+A common first-order intuition is:
 
 ```text
 P_dynamic ∝ α C V² f
@@ -35,257 +133,185 @@ P_dynamic ∝ α C V² f
 
 where:
 
-- `α` is switching activity
-- `C` is capacitance
-- `V` is supply voltage
-- `f` is switching frequency
-
-This is an intuition, not a complete chip-power equation.
-
-### Performance
-
-For this synchronous block, performance is constrained by timing.
-
-A smaller achievable clock period means a higher possible clock frequency:
-
 ```text
-f = 1 / T
+α = switching activity
+C = switched capacitance
+V = supply voltage
+f = frequency
 ```
 
-### Area
+This is not a complete power model, but it explains useful trends.
 
-ASIC area may refer to different things:
+### Leakage/static power
+
+Transistors consume some current even when they are not intentionally switching.
+
+That component depends strongly on process, voltage, temperature, transistor choices, and cell composition.
+
+## 5. Power estimates depend on activity assumptions
+
+A power tool needs to know or assume how often signals toggle.
+
+If it does not have realistic activity from a workload, it may use default assumptions.
+
+Therefore always ask:
 
 ```text
-standard-cell area
-core area
-die/block area
+Where did the switching activity come from?
 ```
 
-Do not mix them.
+A power number without assumptions is easy to misuse.
 
-### Efficiency is not one universal metric
+## 6. Find final metrics
 
-Examples include:
-
-```text
-area efficiency
-energy per operation
-performance per area
-power density
-```
-
-Choose a metric that matches the design goal.
-
-## Prerequisites
-
-- [post-route timing](page_20.md)
-
-## Steps
-
-### 1. Open final metrics
+Run:
 
 ```bash
-RUN=$(ls -dt runs/* | head -1)
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
 
-cat "$RUN/final/metrics.csv"
+ls "$RUN/final/metrics."*
 ```
 
-For machine-readable inspection:
+LibreLane normally provides:
+
+```text
+metrics.csv
+metrics.json
+```
+
+## 7. Explore `metrics.json` without memorizing key names
+
+Use Python to print metrics whose names contain relevant concepts:
 
 ```bash
-python3 -m json.tool "$RUN/final/metrics.json" | less
+python3 - "$RUN/final/metrics.json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path) as f:
+    metrics = json.load(f)
+
+keywords = (
+    "area", "util", "cell", "power", "slack", "wns", "tns",
+    "wire", "route", "drc", "lvs", "clock", "viol"
+)
+
+for key in sorted(metrics):
+    low = key.lower()
+    if any(word in low for word in keywords):
+        print(f"{key}: {metrics[key]}")
+PY
 ```
 
-### 2. Search useful metrics
+LibreLane metric naming evolves.
 
-```bash
-grep -iE \
-'area|util|power|slack|tns|wns|wire|cell|drc|lvs|antenna|ir' \
-"$RUN/final/metrics.csv"
-```
+This method teaches you to inspect the data instead of assuming one frozen schema.
 
-Metric names can change as the flow evolves.
+## 8. Build your PPA table
 
-Use the semantic meaning, not a memorized line number.
-
-### 3. Record physical area
-
-Record separately:
+Create:
 
 ```text
-standard-cell area
-core area
-die/block area
+reports/ppa_baseline.md
 ```
 
-For our explicit floorplan:
-
-```text
-die = 150 µm × 150 µm
-```
-
-but your actual reports are the authority.
-
-### 4. Calculate area utilization
-
-A useful conceptual metric is:
-
-```text
-cell utilization =
-standard-cell area / core area
-```
-
-Do not confuse this with placement target density.
-
-### 5. Record performance
-
-Use post-route timing.
-
-If your clock period is:
-
-```text
-10 ns
-```
-
-the requested frequency is:
-
-```text
-100 MHz
-```
-
-But if setup timing fails, the design has not demonstrated operation at that target.
-
-A rough period estimate based only on worst setup slack can help intuition:
-
-```text
-approximate required period
-≈ constrained period - worst setup slack
-```
-
-when WNS is negative under the same assumptions.
-
-Treat this as an approximation, not a complete signoff calculation.
-
-### 6. Inspect power reports
-
-Find power reports:
-
-```bash
-find "$RUN" -type f -iname '*power*' -o -iname '*irdrop*'
-```
-
-Search:
-
-```bash
-grep -RniE "total|internal|switch|leak|power" \
-  "$RUN"/*sta* "$RUN"/*power* 2>/dev/null | head -120
-```
-
-Record the categories that the current flow actually reports.
-
-### 7. Interpret power carefully
-
-Power accuracy depends on switching-activity assumptions.
-
-If the flow does not have realistic activity information, treat power as an estimate suitable for learning and relative comparison.
-
-Do not present a vectorless estimate as measured silicon power.
-
-### 8. Define one project efficiency metric
-
-For example:
-
-```text
-performance density =
-frequency target / core area
-```
-
-or:
-
-```text
-cell packing efficiency =
-standard-cell area / core area
-```
-
-State exactly what you calculated and its units.
-
-Do not invent a vague single "chip efficiency percentage."
-
-### 9. Think in tradeoffs
-
-Examples:
-
-```text
-smaller core
-→ less area
-→ possibly more congestion
-→ potentially worse timing
-```
-
-```text
-larger drive cells
-→ potentially better timing
-→ more area
-→ more load/power
-```
-
-```text
-more buffers
-→ may fix slew/timing
-→ adds area and power
-```
-
-```text
-lower clock frequency
-→ easier setup timing
-→ lower throughput
-```
-
-### 10. Save your PPA table
-
-Add to the project README:
+with a table like:
 
 ```markdown
-## ASIC PPA
-
-| metric | value |
-|--------|------:|
-| Standard-cell area | |
-| Core area | |
-| Die/block area | |
-| Cell utilization | |
-| Clock period | |
-| Requested frequency | |
-| Worst setup slack | |
-| Worst hold slack | |
-| Total power estimate | |
-| Dynamic/switching power | |
-| Leakage/static power | |
-| Worst IR drop | |
-| Total routed wirelength | |
+| Metric | Baseline result | Notes |
+|---|---:|---|
+| PDK | sky130A | |
+| Standard-cell library | sky130_fd_sc_hd | |
+| Clock constraint | 10.0 ns | 100 MHz target |
+| Worst setup slack | | corner/report: |
+| Worst hold slack | | corner/report: |
+| Die area | 22,500 µm² | teaching floorplan |
+| Core area | 16,900 µm² | teaching floorplan |
+| Standard-cell area | | from flow metrics |
+| Cell count | | from flow metrics/netlist |
+| Utilization | | from flow metrics |
+| Estimated power | | include assumptions/corner |
+| Routed wirelength | | if reported |
+| DRC violations | | final signoff summary |
+| LVS status | | final signoff summary |
 ```
 
-## Results
+If a metric is unavailable, write:
 
-You should be able to explain why this statement is wrong:
+```text
+not available / not reported
+```
 
-> Design A is better because it has fewer cells.
+Do not invent it.
 
-A complete comparison needs the design objective and physical results.
+## 9. PPA is a trade space
 
-## Checklist
+Suppose you increase drive strengths to improve timing.
 
-- [ ] Recorded standard-cell area
-- [ ] Recorded core and die area
-- [ ] Calculated utilization
-- [ ] Recorded timing
-- [ ] Recorded power estimate
-- [ ] Recorded IR drop
-- [ ] Recorded wirelength
-- [ ] Defined any efficiency metric explicitly
-- [ ] Continued to page 22
+Possible consequences:
 
----
+```text
+performance improves
+area increases
+power increases
+input capacitance increases
+routing changes
+```
 
-*Questions? Ask in the network Discord.*
+Suppose you shrink the floorplan aggressively.
+
+Possible consequences:
+
+```text
+die/core area decreases
+placement density increases
+routing congestion increases
+timing may worsen
+DRC/routing failures may increase
+```
+
+There is no universal “best PPA” without a design objective.
+
+## 10. Efficiency needs a defined denominator
+
+You may eventually define useful metrics such as:
+
+```text
+throughput / area
+operations / joule
+frequency / area
+```
+
+But ASIC 101's ALU does not have a meaningful workload throughput model that justifies pretending one scalar metric captures everything.
+
+For this course, keep the raw engineering quantities visible.
+
+## 11. Do not compare FPGA LUT count with ASIC cell area
+
+These are different implementation fabrics.
+
+FPGA logic uses programmable LUTs, switches, routing, and vendor primitives.
+
+ASIC logic uses standard cells and custom-routed metal.
+
+Numbers from the two domains can be educationally compared at a high level, but they are not the same area/power/timing units.
+
+This course intentionally stays in the ASIC domain.
+
+## Checkpoint
+
+- [ ] you can define PPA
+- [ ] you distinguish die, core, and cell area
+- [ ] you understand that a clock constraint is not proof of achieved frequency
+- [ ] you understand dynamic vs leakage power
+- [ ] you understand why switching assumptions matter
+- [ ] you inspected `metrics.json`
+- [ ] you created a baseline PPA table
+- [ ] you did not invent missing metrics
+
+## References
+
+- LibreLane final results and metrics: https://librelane.readthedocs.io/en/stable/getting_started/newcomers/
+- LibreLane timing closure: https://librelane.readthedocs.io/en/stable/usage/timing_closure/

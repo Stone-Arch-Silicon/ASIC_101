@@ -1,265 +1,267 @@
-# Floorplanning: die, core, rows, pins, taps, and endcaps
+# Page 15 — Floorplanning: give the circuit a physical home
 
-Floorplanning creates the physical canvas on which the design will be built. This is where abstract logic first receives a real physical boundary.
+## What you are learning
 
-## Overview
+Synthesis tells you **what cells are connected**.
 
-Two rectangles matter immediately:
+It does not tell you where those cells physically live.
 
-```text
-+----------------------------------+
-|              DIE                 |
-|                                  |
-|   +--------------------------+   |
-|   |          CORE            |   |
-|   |                          |   |
-|   |  standard-cell rows      |   |
-|   |                          |   |
-|   +--------------------------+   |
-|                                  |
-+----------------------------------+
-```
+Floorplanning creates the physical canvas for the design.
 
-### Die area
+This is where coordinates, boundaries, rows, and pins enter the story.
 
-The **die area** is the outer boundary of the block being hardened.
+## 1. Die and core
 
-In this project:
+Your configuration used:
 
 ```json
-"DIE_AREA": [0, 0, 150, 150]
-```
-
-means approximately:
-
-```text
-150 µm × 150 µm
-```
-
-for the block boundary.
-
-### Core area
-
-The **core area** is the inner region where standard-cell rows are created.
-
-```json
+"DIE_AREA":  [0, 0, 150, 150],
 "CORE_AREA": [10, 10, 140, 140]
 ```
 
-creates margins around the core.
+Conceptually:
 
-### Why not fill the entire die with cells?
+```text
++---------------------------------------+
+|                  DIE                  |
+|                                       |
+|    +-----------------------------+    |
+|    |            CORE             |    |
+|    |                             |    |
+|    |  standard-cell rows live    |    |
+|    |  inside this region         |    |
+|    |                             |    |
+|    +-----------------------------+    |
+|                                       |
++---------------------------------------+
+```
 
-Physical design needs room for:
+The **die** is the outer physical boundary of this hardened block.
 
-- routing
-- power distribution
-- clock buffers
-- timing-fix buffers
-- legal placement movement
-- congestion relief
-- physical-only cells
+The **core** is the region where standard-cell placement occurs.
 
-A design with no whitespace can become impossible to route or impossible to fix.
+## 2. Why not place cells anywhere?
 
-### Placement sites and rows
+Standard cells are designed to sit on legal placement rows and sites.
 
-Standard cells are not placed at arbitrary coordinates.
+Think of the core like graph paper with a manufacturing-defined grid.
 
-They sit on legal **sites** arranged into rows.
+Cells cannot simply be dropped at arbitrary continuous coordinates.
 
-Cells are designed to align so neighboring cells can share power rails and follow the library's placement geometry.
+They must align to legal placement locations.
+
+## 3. What is a row?
+
+A standard-cell row is a horizontal strip containing legal placement sites.
+
+Conceptually:
+
+```text
+row 5: |__|__|__|__|__|__|__|__|__|
+row 4: |__|__|__|__|__|__|__|__|__|
+row 3: |__|__|__|__|__|__|__|__|__|
+row 2: |__|__|__|__|__|__|__|__|__|
+row 1: |__|__|__|__|__|__|__|__|__|
+```
+
+Different standard cells occupy one or more site widths.
+
+## 4. Why rows often flip orientation
+
+Adjacent rows commonly alternate orientation so power rails line up correctly.
+
+You may see cells mirrored vertically in alternating rows.
+
+That is not a bug.
+
+It is part of how standard-cell architectures are constructed.
+
+## 5. What are tap and endcap cells?
+
+Not every cell computes logic.
+
+Physical design uses special cells too.
 
 ### Tap cells
 
-CMOS wells/substrate regions must be tied to the correct supply potentials.
-
-Tap cells provide legal well/substrate connections at required intervals.
-
-They are physical infrastructure, not part of your Boolean function.
+Tap cells provide well/substrate connections needed to keep transistor bodies properly tied to power rails.
 
 ### Endcap cells
 
-Endcaps protect/legalize the ends of standard-cell rows according to library/process requirements.
+Endcap cells terminate standard-cell rows in a legal way and help satisfy edge-related physical rules.
 
-Again, they are physical-only cells.
+These are examples of **physical-only cells**.
 
-## Prerequisites
+They exist because silicon is physical, not because your Boolean equations requested them.
 
-- [synthesis understood](page_14.md)
+## 6. Find the floorplan stage
 
-## Steps
-
-### 1. Locate the floorplan state
+From the ASIC directory:
 
 ```bash
-RUN=$(ls -dt runs/* | head -1)
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
 
-FP_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*openroad-floorplan*' | head -1)
-
-echo "$FP_DIR"
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'floorplan|tap|endcap|io'
 ```
 
-### 2. Open the floorplan in OpenROAD
+You may see several stages because floorplanning is more than one operation.
+
+## 7. Inspect the design in OpenROAD
+
+Open the final design:
 
 ```bash
-librelane \
-  --with-initial-state "$FP_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
+librelane --last-run --flow OpenInOpenROAD config.json
 ```
 
-### 3. Identify the die boundary
+Even though this opens the final state, it is useful for learning the floorplan geometry.
 
-In the GUI, find the outer block rectangle.
-
-This is not a decorative border.
-
-It is the physical boundary used by the implementation.
-
-### 4. Identify the core
-
-Look inside the die for the region containing placement rows.
-
-Ask:
+In the GUI, locate:
 
 ```text
-How much margin exists between the core and die?
-Why might routing or PDN need that margin?
+die boundary
+core boundary
+standard-cell rows
+input/output pins
+placed cells
 ```
 
-### 5. Inspect rows
+Use zoom aggressively.
 
-Zoom in until you can see the repeated standard-cell row structure.
+A tiny design inside a 150 µm square may initially look sparse.
 
-Rows generally alternate orientation so adjacent rows can share power rails correctly.
+## 8. Find an intermediate OpenROAD database
 
-### 6. Find the tap/endcap stage
+The run is a history of the design.
+
+Find OpenROAD database files:
 
 ```bash
-TAP_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*tapendcapinsertion*' | head -1)
-
-echo "$TAP_DIR"
+find "$RUN" -type f -name '*.odb' | sort
 ```
 
-Open it:
+Look for an `.odb` produced around the floorplanning stage.
+
+You can often open a specific database directly with:
 
 ```bash
-librelane \
-  --with-initial-state "$TAP_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
+openroad -gui <PATH_TO_ODB>
 ```
 
-Now compare this with the raw floorplan.
+If a particular database also requires libraries or setup scripts, use LibreLane's generated commands or open the closest state using the documented flow mechanisms.
 
-Look for physical-only cells added to the rows.
+The important habit is to learn that **intermediate states are inspectable**.
 
-### 7. Understand utilization
+## 9. What does utilization mean geometrically?
 
-Core utilization is conceptually:
+Imagine the available core area is:
 
 ```text
-standard-cell area
------------------- × 100%
-usable core area
+A_core
 ```
 
-Higher utilization means:
+and the total placeable standard-cell area is:
 
 ```text
-more cells packed into less area
+A_cells
 ```
 
-That can improve compactness, but can also cause:
+Then a simplified utilization intuition is:
 
 ```text
-routing congestion
-poor timing
-insufficient room for buffers
-harder legalization
+utilization ≈ A_cells / A_core
 ```
 
-Lower utilization usually means more whitespace and a larger core.
+A design at very high utilization leaves little whitespace.
 
-### 8. Understand aspect ratio
+Whitespace is not always wasted.
 
-An aspect ratio near:
+It gives the implementation room for:
 
 ```text
-1.0
+buffer insertion
+clock cells
+routing access
+congestion relief
+timing repair
 ```
 
-produces a roughly square core.
+## 10. Why our floorplan is intentionally oversized
 
-A rectangular core may be useful for:
+This ALU is tiny.
 
-- interface geometry
-- macro placement
-- top-level integration
-- routing structure
-- package constraints
+A highly optimized commercial floorplan would probably be much smaller than the teaching floorplan.
 
-There is no universal ideal shape.
-
-### 9. Measure dimensions
-
-Record:
+We intentionally gave it room so you can clearly see:
 
 ```text
-die width
-die height
-core width
-core height
+rows
+power straps
+cell clusters
+routing
+clock structures
 ```
 
-Calculate:
+Later, Page 24 turns area into an engineering experiment.
+
+## 11. Input/output pins are physical objects too
+
+At RTL, a port is just a named interface:
+
+```verilog
+input wire [7:0] a;
+```
+
+At physical design, those signals need physical pin shapes on metal layers.
+
+Pin placement affects routing because every signal has to reach its pin.
+
+For a macro embedded inside a larger chip, these pins become the physical interface to the surrounding design.
+
+## 12. Save floorplan evidence
+
+Save a screenshot showing:
 
 ```text
-die area  = width × height
-core area = width × height
+die boundary
+core boundary
+rows
+some visible cells/pins
 ```
 
-Use µm and µm².
-
-### 10. Save screenshots
-
-Save:
+as:
 
 ```text
 screenshots/floorplan.png
-screenshots/tap_endcap.png
 ```
 
-## Results
+Then create:
 
-Record:
+```text
+reports/page15_floorplan_notes.md
+```
 
-| floorplan metric | value |
-|------------------|------:|
-| Die width | |
-| Die height | |
-| Die area | |
-| Core width | |
-| Core height | |
-| Core area | |
-| Aspect ratio | |
-| Target utilization/density | |
+and answer:
 
-## Checklist
+1. What is the die?
+2. What is the core?
+3. Why do rows exist?
+4. Why does a low-utilization design contain whitespace?
+5. Name two types of physical-only cells.
 
-- [ ] Can identify die boundary
-- [ ] Can identify core boundary
-- [ ] Can identify placement rows
-- [ ] Understand placement sites
-- [ ] Understand tap cells
-- [ ] Understand endcap cells
-- [ ] Understand utilization
-- [ ] Recorded dimensions
-- [ ] Continued to page 16
+## Checkpoint
 
----
+- [ ] you can distinguish die area from core area
+- [ ] you understand placement rows and sites
+- [ ] you know what tap and endcap cells are for
+- [ ] you understand utilization conceptually
+- [ ] you found floorplan-related steps in the run
+- [ ] you inspected the physical boundaries in OpenROAD
+- [ ] you saved a floorplan screenshot and notes
 
-*Questions? Ask in the network Discord.*
+## References
+
+- LibreLane step variables: https://librelane.readthedocs.io/en/stable/reference/step_config_vars.html
+- OpenROAD floorplanning documentation: https://openroad.readthedocs.io/

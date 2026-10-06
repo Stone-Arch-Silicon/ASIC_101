@@ -1,47 +1,345 @@
-# Synthesize and implement the ALU in Vivado
+# Page 8 — Build the complete 8-bit ALU
 
-Now turn the verified RTL into an FPGA implementation. You will constrain the design, run synthesis, place and route it, and export the reports used for the final analysis.
+## What you are learning
 
-## Overview
+Now we combine the ideas from the previous pages into the main ASIC 101 design.
 
-Simulation answered:
-
-```text
-Does the logic behave correctly?
-```
-
-Synthesis and implementation answer different questions:
+You will create:
 
 ```text
-What hardware did the tool build?
-How many FPGA resources does it use?
-Can it meet the requested clock?
-What paths limit performance?
-What power does Vivado estimate?
+adder8
+    ↓
+alu_core
+    ↓
+alu_top
 ```
 
-For this project, `alu_top` is the synthesis top.
+The ALU core is combinational.
 
-The registered wrapper creates internal register-to-register timing paths through the ALU.
+The top level adds input and output registers so the ASIC flow later has a clear synchronous timing path.
 
-## Prerequisites
+## 1. ALU interface
 
-- [Verification complete](page_7.md)
-- all tests passing
-- target FPGA selected in Vivado
-
-## Steps
-
-### 1. Set the synthesis top
-
-Under **Sources**:
+The inputs are:
 
 ```text
-right-click alu_top
-→ Set as Top
+a   : 8 bits
+b   : 8 bits
+op  : 3 bits
 ```
 
-Your design sources should contain:
+The operation encoding is:
+
+| `op` | Operation | Result |
+| --- | --- | --- |
+| `000` | ADD | `a + b` through `adder8` |
+| `001` | SUB | `a - b` through `adder8` |
+| `010` | AND | `a & b` |
+| `011` | OR | `a \| b` |
+| `100` | XOR | `a ^ b` |
+| `101` | NOT | `~a` |
+| `110` | Shift left | `a << 1` |
+| `111` | Shift right | `a >> 1` |
+
+The outputs are:
+
+```text
+y
+carry
+overflow
+zero
+negative
+```
+
+## 2. Status flags
+
+### `zero`
+
+```text
+1 when y == 0
+```
+
+### `negative`
+
+```text
+most-significant bit of y
+```
+
+For an 8-bit two's-complement value, `y[7] = 1` means the result is negative.
+
+### `carry`
+
+Meaningful for ADD and SUB according to the arithmetic convention described on Page 7.
+
+### `overflow`
+
+Signals signed two's-complement overflow for ADD and SUB.
+
+## 3. Create `alu_core`
+
+Create:
+
+```text
+rtl/alu_core.v
+```
+
+with:
+
+```verilog
+module alu_core (
+  input  wire [7:0] a,
+  input  wire [7:0] b,
+  input  wire [2:0] op,
+
+  output reg  [7:0] y,
+  output reg        carry,
+  output reg        overflow,
+  output reg        zero,
+  output reg        negative
+);
+
+  wire       sub;
+  wire [7:0] b_arith;
+  wire [7:0] arithmetic_result;
+  wire       arithmetic_cout;
+
+  assign sub     = (op == 3'b001);
+  assign b_arith = b ^ {8{sub}};
+
+  adder8 u_adder (
+    .a    (a),
+    .b    (b_arith),
+    .cin  (sub),
+    .sum  (arithmetic_result),
+    .cout (arithmetic_cout)
+  );
+
+  always @* begin
+
+    // Safe defaults.
+    // Every output gets a value for every path through this block.
+    y        = 8'h00;
+    carry    = 1'b0;
+    overflow = 1'b0;
+
+    case (op)
+
+      3'b000: begin
+        y        = arithmetic_result;
+        carry    = arithmetic_cout;
+        overflow = (~(a[7] ^ b[7])) & (arithmetic_result[7] ^ a[7]);
+      end
+
+      3'b001: begin
+        y        = arithmetic_result;
+        carry    = arithmetic_cout;
+        overflow = (a[7] ^ b[7]) & (arithmetic_result[7] ^ a[7]);
+      end
+
+      3'b010: y = a & b;
+      3'b011: y = a | b;
+      3'b100: y = a ^ b;
+      3'b101: y = ~a;
+      3'b110: y = a << 1;
+      3'b111: y = a >> 1;
+
+      default: y = 8'h00;
+
+    endcase
+
+    zero     = (y == 8'h00);
+    negative = y[7];
+
+  end
+
+endmodule
+```
+
+## 4. Why this `always` block is combinational
+
+The sensitivity list is:
+
+```verilog
+always @*
+```
+
+That tells Verilog to re-evaluate the block when any relevant input changes.
+
+Inside this combinational block, we use blocking assignments:
+
+```verilog
+=
+```
+
+That is different from the nonblocking assignments used in the clocked register on Page 6.
+
+## 5. Why default assignments matter
+
+At the beginning of the block:
+
+```verilog
+y        = 8'h00;
+carry    = 1'b0;
+overflow = 1'b0;
+```
+
+Every output is assigned on every possible path.
+
+If a combinational procedural block fails to assign an output for some condition, synthesis may infer storage, commonly called a **latch**.
+
+For this ALU, we do not want latches.
+
+Safe defaults make the intended combinational behavior explicit.
+
+## 6. Create the registered top level
+
+Create:
+
+```text
+rtl/alu_top.v
+```
+
+with:
+
+```verilog
+module alu_top (
+  input  wire       clk,
+  input  wire       rst_n,
+  input  wire [7:0] a,
+  input  wire [7:0] b,
+  input  wire [2:0] op,
+
+  output reg  [7:0] y,
+  output reg        carry,
+  output reg        overflow,
+  output reg        zero,
+  output reg        negative
+);
+
+  reg [7:0] a_q;
+  reg [7:0] b_q;
+  reg [2:0] op_q;
+
+  wire [7:0] y_comb;
+  wire       carry_comb;
+  wire       overflow_comb;
+  wire       zero_comb;
+  wire       negative_comb;
+
+  alu_core u_core (
+    .a        (a_q),
+    .b        (b_q),
+    .op       (op_q),
+    .y        (y_comb),
+    .carry    (carry_comb),
+    .overflow (overflow_comb),
+    .zero     (zero_comb),
+    .negative (negative_comb)
+  );
+
+  always @(posedge clk) begin
+
+    if (!rst_n) begin
+
+      a_q      <= 8'h00;
+      b_q      <= 8'h00;
+      op_q     <= 3'b000;
+
+      y        <= 8'h00;
+      carry    <= 1'b0;
+      overflow <= 1'b0;
+      zero     <= 1'b1;
+      negative <= 1'b0;
+
+    end
+    else begin
+
+      a_q      <= a;
+      b_q      <= b;
+      op_q     <= op;
+
+      y        <= y_comb;
+      carry    <= carry_comb;
+      overflow <= overflow_comb;
+      zero     <= zero_comb;
+      negative <= negative_comb;
+
+    end
+
+  end
+
+endmodule
+```
+
+## 7. Understand the data path
+
+The structure is:
+
+```text
+external inputs
+      ↓
+input registers: a_q, b_q, op_q
+      ↓
+combinational alu_core
+      ↓
+output registers
+      ↓
+external outputs
+```
+
+This gives later timing analysis a path like:
+
+```text
+launch register
+      ↓
+combinational logic
+      ↓
+capture register
+```
+
+## 8. Understand the latency
+
+Because the top level has input and output registers, the external input sampled at one rising edge is processed and captured at a later edge.
+
+Do not treat `alu_top` as zero-latency combinational logic.
+
+For exhaustive functional verification, we will test `alu_core` directly.
+
+For implementation and timing, we will synthesize `alu_top`.
+
+That is intentional.
+
+## 9. Compile the whole hierarchy
+
+Run:
+
+```bash
+iverilog \
+  -g2012 \
+  -Wall \
+  -s alu_top \
+  -o build/alu_top.vvp \
+  rtl/adder8.v \
+  rtl/alu_core.v \
+  rtl/alu_top.v
+```
+
+You should get no compile errors.
+
+## 10. Check your source tree
+
+You should now have:
+
+```text
+rtl/
+├── logic_demo.v
+├── register8.v
+├── adder8.v
+├── alu_core.v
+└── alu_top.v
+```
+
+The main project files are:
 
 ```text
 adder8.v
@@ -49,193 +347,12 @@ alu_core.v
 alu_top.v
 ```
 
-Your testbench remains under **Simulation Sources** only.
+## Before continuing
 
-### 2. Add a timing constraint
+You should understand:
 
-Create:
-
-```text
-constr/alu.xdc
-```
-
-Start with a 100 MHz clock:
-
-```tcl
-create_clock -name clk -period 10.000 [get_ports clk]
-```
-
-The period is in nanoseconds.
-
-```text
-10 ns = 100 MHz
-```
-
-Add simple external interface assumptions:
-
-```tcl
-set_input_delay  -clock clk 2.000 \
-  [get_ports -filter {DIRECTION == IN && NAME != clk}]
-
-set_output_delay -clock clk 2.000 \
-  [get_ports -filter {DIRECTION == OUT}]
-```
-
-These are educational interface assumptions, not board-specific numbers.
-
-If your team provides real board timing requirements, use those instead.
-
-### 3. Run synthesis
-
-In Flow Navigator:
-
-```text
-Synthesis
-→ Run Synthesis
-```
-
-When it finishes:
-
-```text
-Open Synthesized Design
-```
-
-Inspect:
-
-```text
-Schematic
-Report Utilization
-```
-
-Look for:
-
-- LUTs
-- flip-flops
-- carry resources
-- whether the adder hierarchy is still recognizable
-
-Save:
-
-```text
-screenshots/synthesized_schematic.png
-```
-
-### 4. Run implementation
-
-In Flow Navigator:
-
-```text
-Implementation
-→ Run Implementation
-```
-
-Then:
-
-```text
-Open Implemented Design
-```
-
-Vivado will place and route the synthesized FPGA resources onto the target device.
-
-You do **not** need to generate a bitstream for this assignment.
-
-### 5. Create a reports folder
-
-Make sure this exists:
-
-```text
-reports/
-```
-
-If the Vivado working directory is not your repository root, use absolute file paths in the commands below.
-
-### 6. Export utilization
-
-In the Vivado Tcl Console:
-
-```tcl
-report_utilization -file reports/utilization.rpt
-```
-
-### 7. Export timing
-
-```tcl
-report_timing_summary -file reports/timing_summary.rpt
-```
-
-Also run:
-
-```tcl
-check_timing -verbose -file reports/check_timing.rpt
-```
-
-### 8. Export power
-
-With the implemented design open:
-
-```tcl
-report_power -file reports/power.rpt
-```
-
-### 9. Export a DRC report
-
-```tcl
-report_drc -file reports/drc.rpt
-```
-
-### 10. Save implementation evidence
-
-Save screenshots of:
-
-```text
-screenshots/implemented_device.png
-screenshots/timing_summary.png
-screenshots/power_summary.png
-```
-
-Your screenshots do not need to contain every number. The `.rpt` files are the actual source of the final metrics.
-
-## Results
-
-After implementation, your repository should contain:
-
-```text
-reports/
-├── check_timing.rpt
-├── drc.rpt
-├── power.rpt
-├── timing_summary.rpt
-└── utilization.rpt
-```
-
-and:
-
-```text
-screenshots/
-├── simulation.png
-├── synthesized_schematic.png
-├── implemented_device.png
-├── timing_summary.png
-└── power_summary.png
-```
-
-## Checklist
-
-- [ ] `alu_top` is synthesis top
-- [ ] Added the clock constraint
-- [ ] Synthesis completed
-- [ ] Inspected the synthesized schematic
-- [ ] Implementation completed
-- [ ] Exported utilization report
-- [ ] Exported timing report
-- [ ] Exported timing-check report
-- [ ] Exported power report
-- [ ] Exported DRC report
-- [ ] Saved implementation screenshots
-- [ ] Continued to page 9
-
-Continue to [Analyze and submit the design](page_9.md).
-
----
-
-*Questions? Ask in the network Discord.*
+- why `alu_core` is combinational
+- why `alu_top` contains registers
+- why ADD and SUB use the custom `adder8`
+- why default assignments prevent unintended latches
+- why `alu_core` and `alu_top` are tested for different purposes

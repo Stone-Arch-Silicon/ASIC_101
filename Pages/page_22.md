@@ -1,202 +1,277 @@
-# Signoff checks: DRC, LVS, antenna, XOR, and manufacturability
+# Page 22 — Signoff checks: DRC, LVS, antenna, and “is this layout actually legal?”
 
-A GDS file is only useful if its geometry is legal and its extracted connectivity matches the intended circuit.
+## What you are learning
 
-## Overview
+A beautiful GDS screenshot proves almost nothing by itself.
 
-Several different checks answer different questions.
+Before a layout is considered healthy, multiple different verification checks must answer different questions.
 
-| check | question |
-|-------|----------|
-| DRC | Is the geometry legal for the manufacturing rules? |
-| LVS | Does the extracted layout connectivity match the schematic/netlist? |
-| Antenna | Could manufacturing charge damage transistor gates? |
-| XOR | Do two independently generated layout streams match geometrically? |
-| STA | Does timing satisfy the constraints across required corners? |
-| IR drop | Is the supply network electrically acceptable under the modeled conditions? |
+This page introduces the major physical signoff concepts you will encounter in the open-source flow.
 
-Passing one does not imply passing the others.
+## 1. One check cannot prove everything
 
-### DRC
+Consider these questions:
 
-Design Rule Checking tests geometry rules such as:
+```text
+Does the geometry obey manufacturing rules?
+Does the extracted connectivity match the intended circuit?
+Does the design meet timing?
+Are there antenna problems?
+Did layout generation preserve the intended shapes?
+```
+
+These are different questions.
+
+They require different checks.
+
+## 2. DRC — Design Rule Checking
+
+DRC asks:
+
+```text
+Is the physical geometry legal according to the process rules?
+```
+
+Examples of rules include:
 
 ```text
 minimum metal width
-minimum spacing
-via enclosure
+minimum metal spacing
 minimum area
-layer interaction rules
+via enclosure
+layer overlap requirements
+well/diffusion relationships
 ```
 
-### LVS
+A DRC violation is not a logic error.
 
-Layout Versus Schematic asks:
+It is a **physical/manufacturing-rule error**.
+
+## 3. Why foundries have design rules
+
+Lithography and fabrication are physical processes with limits.
+
+If two metal lines are too close, fabrication may not reliably produce the intended separation.
+
+If a via is not properly enclosed, it may not connect reliably.
+
+Design rules encode constraints required for manufacturability and reliability.
+
+## 4. LVS — Layout Versus Schematic
+
+LVS asks:
 
 ```text
-Does the circuit extracted from the physical layout
-match the intended netlist?
+Does the circuit extracted from the layout match the intended netlist/schematic connectivity?
 ```
 
-DRC can pass while LVS fails.
+Imagine a layout where two signals accidentally short together.
 
-A beautiful legal layout can still be electrically wrong.
+The geometry could theoretically satisfy local width/spacing rules yet still implement the wrong circuit.
 
-### XOR
+LVS checks electrical connectivity, not merely geometric legality.
 
-LibreLane can stream GDS through more than one backend and compare them.
+## 5. DRC-clean does not imply LVS-clean
 
-Geometric differences may reveal stream-out inconsistencies.
-
-## Prerequisites
-
-- [PPA analysis](page_21.md)
-
-## Steps
-
-### 1. Find DRC steps
-
-```bash
-RUN=$(ls -dt runs/* | head -1)
-
-find "$RUN" -maxdepth 1 -type d \
-  \( -iname '*magic-drc*' -o -iname '*klayout-drc*' \)
-```
-
-### 2. Search DRC reports
-
-```bash
-grep -RniE "drc|violation|error|count" \
-  "$RUN"/*drc* 2>/dev/null | head -120
-```
-
-Record Magic and KLayout DRC results separately if both are present.
-
-### 3. Find LVS
-
-```bash
-LVS_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -iname '*netgen-lvs*' | head -1)
-
-echo "$LVS_DIR"
-```
-
-Inspect:
-
-```bash
-grep -RniE "match|mismatch|lvs|error|net|device" \
-  "$LVS_DIR" | head -150
-```
-
-The desired result is logical/layout equivalence under the checker's rules.
-
-### 4. Find antenna checks
-
-```bash
-find "$RUN" -maxdepth 1 -type d -iname '*antenna*'
-```
-
-Inspect the reports before and after repair when both exist.
-
-### 5. Find XOR
-
-```bash
-find "$RUN" -maxdepth 1 -type d -iname '*xor*'
-```
-
-Look for the reported geometric-difference count.
-
-### 6. Read the manufacturability summary
-
-Find:
-
-```bash
-find "$RUN" -maxdepth 2 -type f \
-  -iname '*manufactur*' -o -iname '*summary*'
-```
-
-Also inspect:
+This distinction is important enough to state directly:
 
 ```text
-error.log
-warning.log
+DRC asks: is the geometry legal?
+LVS asks: is the connectivity correct?
 ```
 
-from the run root.
+Passing one does not prove the other.
 
-### 7. Do not ignore deferred errors
+## 6. Antenna checks
 
-Some flows continue through multiple checks so you can collect more information before the final failure.
+As introduced on Page 19, antenna checks protect against fabrication-time charge accumulation that can damage sensitive gate oxides.
 
-That means:
+A routed design can therefore be logically correct and DRC-clean but still have antenna violations.
+
+## 7. XOR / layout consistency checks
+
+Some flows compare two layout representations geometrically using XOR-style checks.
+
+The basic idea is:
 
 ```text
-flow reached GDS
+layout A XOR layout B
 ```
 
-does **not** necessarily mean:
+If the geometry is identical, the difference should be empty.
+
+This can help verify that different stream-out paths or representations agree.
+
+## 8. Timing is also part of signoff thinking
+
+A design can be:
 
 ```text
-flow passed signoff
+DRC-clean
+LVS-clean
 ```
 
-Read the final status and checker reports.
+and still fail timing.
 
-### 8. Understand what "clean" means
+That means the silicon geometry may be legal and electrically connected correctly but not meet the required clock performance.
 
-For this educational macro, a strong result is:
+Signoff is multi-dimensional.
+
+## 9. Find verification stages
+
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'drc|lvs|netgen|magic|klayout|antenna|xor|checker'
+```
+
+Different releases may use different step names or multiple implementations of similar checks.
+
+## 10. Search for violations and failures
+
+Useful generic searches include:
+
+```bash
+grep -Rni --include='*.rpt' --include='*.log' \
+  -E 'violation|violations|error|mismatch|fail|unmatched' "$RUN" \
+  | head -200
+```
+
+Do not treat every line containing the word `error` as a fatal signoff failure without context.
+
+EDA reports can mention counts, historical messages, or tool diagnostics.
+
+Read the surrounding report.
+
+## 11. Inspect final metrics for signoff indicators
+
+Use the `metrics.json` exploration script from Page 21 and search keys containing:
 
 ```text
-0 DRC violations
-LVS clean
-0 unresolved antenna violations
-0 disconnected pins/nets
-no setup violations
-no hold violations
-acceptable IR-drop report
-consistent stream-out/XOR result
+drc
+lvs
+antenna
+xor
+viol
+error
 ```
 
-The exact requirements for a real tapeout are defined by the foundry/shuttle/integration platform.
+Record what the actual flow reports.
 
-### 9. Save evidence
+## 12. What should you do if a check fails?
 
-Save:
+Do **not** write:
 
 ```text
-screenshots/drc_clean.png
-screenshots/lvs_clean.png
-screenshots/signoff_summary.png
+it probably doesn't matter
 ```
 
-## Results
+Instead classify it.
+
+For each unresolved issue, record:
+
+```text
+check name
+count/status
+source report
+likely cause if known
+whether the issue blocks completion
+what you tried
+what remains unresolved
+```
+
+That is professional engineering behavior.
+
+## 13. “A GDS file exists” is not a signoff statement
+
+A flow can often generate layout output even if warnings or violations exist.
+
+Therefore:
+
+```text
+GDS generated
+```
+
+is not equivalent to:
+
+```text
+design is tapeout-ready
+```
+
+## 14. A hardened macro is not automatically a standalone chip
+
+Your `alu_top` layout is a digital macro/block.
+
+A complete standalone chip typically also needs integration components such as:
+
+```text
+pad cells or bumps
+ESD protection
+power/ground pads
+top-level power planning
+clock/reset entry
+package connectivity
+I/O voltage domains
+foundry/shuttle-specific checks
+```
+
+ASIC 101 is teaching the RTL-to-hardened-macro flow.
+
+That is already a major milestone.
+
+Do not oversell it as packaged, fabricated, or measured silicon.
+
+## 15. Create a signoff summary
 
 Create:
 
-| signoff item | result |
-|--------------|--------|
-| Magic DRC | |
-| KLayout DRC | |
-| LVS | |
-| Antenna | |
-| XOR | |
-| Setup | |
-| Hold | |
-| Disconnected pins | |
-| IR drop | |
+```text
+reports/signoff_summary.md
+```
 
-## Checklist
+with:
 
-- [ ] Checked Magic DRC
-- [ ] Checked KLayout DRC
-- [ ] Checked LVS
-- [ ] Checked antenna
-- [ ] Checked XOR
-- [ ] Checked setup
-- [ ] Checked hold
-- [ ] Checked run error/warning logs
-- [ ] Continued to page 23
+```markdown
+# Signoff summary
 
----
+| Check | Status | Evidence/report | Notes |
+|---|---|---|---|
+| RTL exhaustive verification | PASS/FAIL | | |
+| Setup timing | PASS/FAIL | | |
+| Hold timing | PASS/FAIL | | |
+| Detailed-routing violations | PASS/FAIL | | |
+| DRC | PASS/FAIL | | |
+| LVS | PASS/FAIL | | |
+| Antenna | PASS/FAIL | | |
+| Other flow checks | PASS/FAIL | | |
+```
 
-*Questions? Ask in the network Discord.*
+If you cannot establish a status, write:
+
+```text
+UNKNOWN — needs investigation
+```
+
+Unknown is better than false confidence.
+
+## Checkpoint
+
+- [ ] you can explain DRC
+- [ ] you can explain LVS
+- [ ] you understand why DRC and LVS are independent
+- [ ] you can explain antenna checks at a high level
+- [ ] you understand why timing is a separate signoff dimension
+- [ ] you found verification-related stages/reports
+- [ ] you created a signoff summary
+- [ ] you explicitly documented unresolved issues
+
+## References
+
+- LibreLane newcomers/signoff overview: https://librelane.readthedocs.io/en/stable/getting_started/newcomers/
+- Magic: http://opencircuitdesign.com/magic/
+- Netgen: http://opencircuitdesign.com/netgen/
+- KLayout: https://www.klayout.de/

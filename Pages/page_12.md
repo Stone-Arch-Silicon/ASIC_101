@@ -1,247 +1,289 @@
-# Understand the PDK and standard-cell library
+# Page 12 — Install LibreLane and prove the ASIC environment works
 
-Before running the ALU, understand what a PDK actually gives the tools. The RTL is process-independent; the PDK is what turns that logic into geometry and electrical models for a real manufacturing process.
+## What you are learning
 
-## Overview
+Before running your own ALU through physical design, make sure the complete open-source ASIC environment works on your machine.
 
-A **PDK**, or Process Design Kit, is the interface between chip designers and a semiconductor manufacturing process.
+LibreLane provides a reproducible environment containing compatible versions of the tools used by the default flow.
 
-For this tutorial we use:
-
-```text
-sky130A
-```
-
-with the default high-density standard-cell library:
+The goal of this page is:
 
 ```text
-sky130_fd_sc_hd
+install
+→ enter environment
+→ run smoke test
+→ understand what was verified
 ```
 
-Sky130A contains five main metal routing layers plus local interconnect.
+Do not start debugging your own design until the reference environment itself works.
 
-### RTL does not contain transistor geometry
+## 1. Why not install every ASIC tool separately?
 
-This Verilog:
-
-```verilog
-assign y = a & b;
-```
-
-does not tell a foundry:
+You could separately install:
 
 ```text
-where to draw diffusion
-where to draw polysilicon
-how wide metal should be
-what spacing is legal
-how fast the gate is
-how much capacitance it presents
+Yosys
+OpenROAD
+Magic
+KLayout
+Netgen
+OpenRCX
+PDK utilities
 ```
 
-The PDK and standard-cell library provide those facts.
+but compatible version combinations matter.
 
-### Standard cells
+For beginners, that creates unnecessary failure modes.
 
-A standard cell is a pre-designed physical implementation of a small logic function.
+LibreLane's recommended Nix environment provides a matched, reproducible toolchain.
 
-Examples include:
+## 2. Hardware requirements
+
+LibreLane's current Linux documentation lists:
 
 ```text
-inverter
-NAND
-NOR
-AND
-OR
-XOR
-multiplexer
-buffer
-flip-flop
-clock buffer
-tie cell
-tap cell
-filler cell
+minimum: 8 GiB RAM
+recommended: 16 GiB RAM
 ```
 
-A synthesized ASIC is mostly a large number of these cells placed in rows and connected with metal.
+A multicore machine is strongly preferred.
 
-### Different views of one cell
+Small designs such as this ALU are much lighter than large chips, but the environment itself still contains substantial EDA software and PDK data.
 
-The same cell can have several representations.
+## 3. Supported environment
 
-| file/view | contains |
-|-----------|----------|
-| `.lib` Liberty | delay, slew, capacitance, power, timing arcs |
-| LEF | abstract size, pins, routing blockages |
-| GDS | full physical geometry |
-| SPICE | transistor-level electrical representation |
-| Verilog | functional model |
+For the smoothest course experience, use a recent Ubuntu Linux environment.
 
-The tool uses the cheapest useful view for each task.
+Windows students can use WSL2.
 
-For example:
+LibreLane also supports recent macOS through Nix.
 
-- synthesis needs logic/timing information
-- placement needs cell dimensions
-- routing needs pins and obstructions
-- stream-out needs full GDS geometry
-- LVS needs connectivity/electrical information
+These instructions show the Linux/WSL path.
 
-### FEOL and BEOL
+## 4. Install basic prerequisites
 
-**FEOL**, front end of line, creates devices such as transistors.
-
-**BEOL**, back end of line, creates the interconnect stack above those devices.
-
-A routed digital block contains many BEOL shapes:
-
-```text
-metal wires
-vias
-power straps
-clock routes
-signal routes
-```
-
-## Prerequisites
-
-- [toolchain installed](page_11.md)
-
-## Steps
-
-### 1. Find your PDK root
-
-LibreLane/Volare normally manages the PDK under your home directory.
-
-Try:
+Ubuntu/WSL:
 
 ```bash
-echo "${PDK_ROOT:-$HOME/.volare}"
+sudo apt update
+sudo apt install -y git curl
 ```
 
-You can also inspect:
+## 5. Install Nix
+
+Do **not** use Ubuntu's `apt` package for Nix for this course.
+
+Follow LibreLane's official Nix installation documentation:
+
+https://librelane.readthedocs.io/en/stable/installation/nix_installation/
+
+The current LibreLane Linux instructions use the official Nix installer and configure the FOSSi binary cache.
+
+Because installation commands can change, copy the current command from the LibreLane documentation rather than preserving an old command in your notes forever.
+
+After Nix installs:
+
+```text
+close the terminal
+open a new terminal
+```
+
+This ensures the environment changes are loaded.
+
+## 6. Clone LibreLane
+
+Run:
 
 ```bash
-ls ~/.volare
+cd ~
+git clone https://github.com/librelane/librelane
 ```
 
-Do not modify PDK files for this tutorial.
-
-### 2. Understand `sky130A`
-
-`sky130A` is the fully qualified PDK variant name.
-
-Use:
+You should now have:
 
 ```text
-sky130A
+~/librelane
 ```
 
-not:
+## 7. Enter the LibreLane environment
+
+Run:
+
+```bash
+nix-shell ~/librelane/shell.nix
+```
+
+The first run may download several gigabytes of tools and dependencies.
+
+Once the shell is ready, commands such as:
 
 ```text
-sky130
+librelane
+yosys
+openroad
+klayout
+magic
+netgen
 ```
 
-The variant matters because the backend metal stack and extracted interconnect behavior are part of the process definition.
+are provided by the environment.
 
-### 3. Understand the standard-cell library name
+## 8. Run the smoke test
 
-The default Sky130 standard-cell library used by the flow is:
+Inside the Nix shell:
+
+```bash
+librelane --smoke-test
+```
+
+LibreLane's smoke test is specifically intended to confirm that the installation works.
+
+A successful smoke test is much more meaningful than checking only:
 
 ```text
-sky130_fd_sc_hd
+does the executable launch?
 ```
 
-Break the name apart conceptually:
+It verifies that the flow can actually run a small design and access the required open PDK environment.
+
+## 9. Record tool versions
+
+Create:
 
 ```text
-sky130
-fd
-sc
-hd
+reports/asic_environment.txt
 ```
 
-The important part for this class is that `hd` is a high-density digital standard-cell library.
+from the course project.
 
-### 4. Look at cell names after synthesis
+You can capture basic environment information with commands such as:
 
-Later you will see names similar to:
+```bash
+{
+  echo "Date:"
+  date
+  echo
+
+  echo "LibreLane:"
+  librelane --version
+  echo
+
+  echo "Yosys:"
+  yosys -V
+  echo
+
+  echo "OpenROAD:"
+  openroad -version
+} > ~/asic_101/reports/asic_environment.txt
+```
+
+If a particular tool uses a slightly different version flag in your release, run:
+
+```bash
+toolname --help
+```
+
+and use the documented version option.
+
+The point is to make your run reproducible.
+
+## 10. Why version recording matters
+
+EDA results can change when tools change.
+
+Two people may use the same RTL but get somewhat different:
 
 ```text
-sky130_fd_sc_hd__and2_1
-sky130_fd_sc_hd__mux2_1
-sky130_fd_sc_hd__dfxtp_1
-sky130_fd_sc_hd__buf_2
+cell counts
+timing
+placement
+routing
+warnings
 ```
 
-The suffix often represents a drive-strength variant.
+if their tool versions differ.
 
-A stronger cell can drive more load or improve slew, but usually consumes more area and power.
+Recording the environment gives future readers context.
 
-This is one of the basic physical-design tradeoffs:
+## 11. Prepare the ASIC project area
+
+Inside the ASIC 101 project:
+
+```bash
+cd ~/asic_101
+mkdir -p asic
+```
+
+Your project should now look like:
 
 ```text
-stronger drive
-→ possibly faster
-→ usually larger
-→ usually more power/capacitance
+asic_101/
+├── rtl/
+│   ├── adder8.v
+│   ├── alu_core.v
+│   └── alu_top.v
+├── sim/
+├── scripts/
+├── asic/
+├── build/
+├── reports/
+└── screenshots/
 ```
 
-### 5. Understand PVT corners
+Do not duplicate the RTL into another directory yet.
 
-Real silicon is not one perfect device.
+Keeping one source of truth reduces the chance that you simulate one version and physically implement a different version.
 
-Timing changes with:
+## 12. What comes next
+
+The next page should create the LibreLane configuration for:
 
 ```text
-Process
-Voltage
-Temperature
+DESIGN_NAME       = alu_top
+CLOCK_PORT        = clk
+CLOCK_PERIOD      = 10 ns
+PDK               = sky130A
+STD_CELL_LIBRARY  = sky130_fd_sc_hd
 ```
 
-Together these are often called **PVT** conditions.
+and then run a baseline implementation.
 
-Physical interconnect also has corners, so LibreLane's reports may use fully qualified interconnect/process/voltage/temperature corners.
+From there, the remainder of ASIC 101 should teach each physical stage separately:
 
-Do not report only the best corner and pretend it represents every chip.
+```text
+13 — Configure and run the first RTL-to-GDS flow
+14 — Read the synthesis result and standard-cell netlist
+15 — Floorplanning
+16 — Power distribution
+17 — Placement
+18 — Clock tree synthesis
+19 — Routing
+20 — Parasitics and static timing analysis
+21 — Power, performance, and area
+22 — DRC, LVS, antenna, and physical verification
+23 — Inspect all major ASIC file formats and intermediate states
+24 — Compare adder architectures under identical ASIC constraints
+25 — Final reproducibility and tapeout-readiness package
+```
 
-### 6. Know what the PDK controls
+That preserves the strongest part of the existing curriculum—the stage-by-stage physical-design walkthrough—while making the front half genuinely accessible to someone starting from zero.
 
-The PDK provides or constrains things such as:
+## Checkpoint
 
-- legal metal layers
-- routing directions
-- widths
-- spacings
-- via definitions
-- design rules
-- standard-cell dimensions
-- timing models
-- power models
-- RC extraction information
-- IO routing layers
-- well tap cells
-- endcap cells
-- filler and decap cells
+Do not move on until:
 
-The PDK is why a layout for one process cannot simply be fabricated in another process.
+- [ ] Nix is installed using the current LibreLane instructions
+- [ ] `~/librelane` exists
+- [ ] `nix-shell ~/librelane/shell.nix` works
+- [ ] `librelane --smoke-test` succeeds
+- [ ] you saved basic tool versions
+- [ ] `~/asic_101/asic/` exists
+- [ ] your verified RTL from Pages 7–9 is still the same source you will implement
 
-## Results
+## References
 
-You should now be able to explain this sentence:
-
-> Yosys maps the ALU into the logic cells available in the selected standard-cell library, and OpenROAD physically places and connects those cells using the geometry, routing, timing, and extraction information supplied by the PDK.
-
-## Checklist
-
-- [ ] Know what a PDK is
-- [ ] Know what a standard cell is
-- [ ] Know the difference between Liberty, LEF, GDS, SPICE, and Verilog cell views
-- [ ] Know the difference between FEOL and BEOL
-- [ ] Know what PVT means
-- [ ] Continued to page 13
-
----
-
-*Questions? Ask in the network Discord.*
+- LibreLane installation: https://librelane.readthedocs.io/en/stable/installation/
+- LibreLane Nix installation: https://librelane.readthedocs.io/en/stable/installation/nix_installation/
+- LibreLane newcomers tutorial: https://librelane.readthedocs.io/en/stable/getting_started/newcomers/
+- OpenROAD documentation: https://openroad.readthedocs.io/
+- SKY130 PDK documentation: https://skywater-pdk.readthedocs.io/

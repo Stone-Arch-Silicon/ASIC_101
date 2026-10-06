@@ -1,178 +1,342 @@
-# Option B: Carry Lookahead Adder
+# Page 5 — Simulation and testbenches from zero
 
-The Carry Lookahead Adder reduces the amount of strictly serial carry logic by computing carry conditions from propagate and generate signals.
+## What you are learning
 
-## Overview
+Writing RTL is not enough.
 
-For bit `i`, define
+You must test it.
+
+On this page you will:
+
+- create a testbench
+- instantiate your design
+- drive inputs
+- check outputs automatically
+- generate a waveform
+- open the waveform in GTKWave
+
+## 1. What is a testbench?
+
+A testbench is HDL used to test another HDL module.
+
+The module being tested is often called the:
 
 ```text
-p[i] = a[i] XOR b[i]
-g[i] = a[i] AND b[i]
+DUT
 ```
 
-`p` means the stage can propagate a carry.
-
-`g` means the stage generates a carry regardless of the incoming carry.
-
-For one bit,
+meaning:
 
 ```text
-c[i+1] = g[i] OR (p[i] AND c[i])
+Design Under Test
 ```
 
-Instead of waiting for each carry sequentially, a lookahead block expands the equations so multiple carry conditions can be evaluated in parallel.
+Testbenches are not normally synthesized into the chip.
 
-This project uses two 4-bit lookahead blocks to build the 8-bit adder.
+They are allowed to do simulation-only things such as:
 
-## Prerequisites
+```text
+wait
+print text
+stop the simulator
+generate arbitrary input patterns
+compare actual and expected answers
+```
 
-- [ALU specification](page_3.md)
-- Boolean algebra
-- propagate and generate signals
+## 2. Create the testbench
 
-## Steps
+Create:
 
-### 1. Build a four-bit lookahead block
+```text
+sim/logic_demo_tb.v
+```
 
-Create `rtl/adder8.v` and begin with:
+with:
 
 ```verilog
-module cla4 (
-  input  wire [3:0] a,
-  input  wire [3:0] b,
-  input  wire       cin,
-  output wire [3:0] sum,
-  output wire       cout
-);
+`timescale 1ns/1ps
 
-  wire [3:0] p;
-  wire [3:0] g;
-  wire [4:0] c;
+module logic_demo_tb;
 
-  assign p = a ^ b;
-  assign g = a & b;
+  reg a;
+  reg b;
+  reg sel;
 
-  assign c[0] = cin;
+  wire y_and;
+  wire y_or;
+  wire y_xor;
+  wire y_not;
+  wire y_mux;
 
-  assign c[1] =
-      g[0] |
-      (p[0] & c[0]);
+  integer errors;
 
-  assign c[2] =
-      g[1] |
-      (p[1] & g[0]) |
-      (p[1] & p[0] & c[0]);
+  logic_demo dut (
+    .a     (a),
+    .b     (b),
+    .sel   (sel),
+    .y_and (y_and),
+    .y_or  (y_or),
+    .y_xor (y_xor),
+    .y_not (y_not),
+    .y_mux (y_mux)
+  );
 
-  assign c[3] =
-      g[2] |
-      (p[2] & g[1]) |
-      (p[2] & p[1] & g[0]) |
-      (p[2] & p[1] & p[0] & c[0]);
+  task check_outputs;
+    input exp_and;
+    input exp_or;
+    input exp_xor;
+    input exp_not;
+    input exp_mux;
+    begin
+      #1;
 
-  assign c[4] =
-      g[3] |
-      (p[3] & g[2]) |
-      (p[3] & p[2] & g[1]) |
-      (p[3] & p[2] & p[1] & g[0]) |
-      (p[3] & p[2] & p[1] & p[0] & c[0]);
+      if (
+        y_and !== exp_and ||
+        y_or  !== exp_or  ||
+        y_xor !== exp_xor ||
+        y_not !== exp_not ||
+        y_mux !== exp_mux
+      ) begin
+        $display(
+          "FAIL a=%b b=%b sel=%b | and=%b or=%b xor=%b not=%b mux=%b",
+          a, b, sel,
+          y_and, y_or, y_xor, y_not, y_mux
+        );
+        errors = errors + 1;
+      end
+    end
+  endtask
 
-  assign sum[0] = p[0] ^ c[0];
-  assign sum[1] = p[1] ^ c[1];
-  assign sum[2] = p[2] ^ c[2];
-  assign sum[3] = p[3] ^ c[3];
+  initial begin
+    $dumpfile("build/logic_demo.vcd");
+    $dumpvars(0, logic_demo_tb);
 
-  assign cout = c[4];
+    errors = 0;
+
+    a = 0; b = 0; sel = 0;
+    check_outputs(0, 0, 0, 1, 0);
+
+    a = 0; b = 1; sel = 0;
+    check_outputs(0, 1, 1, 1, 0);
+
+    a = 0; b = 1; sel = 1;
+    check_outputs(0, 1, 1, 1, 1);
+
+    a = 1; b = 0; sel = 0;
+    check_outputs(0, 1, 1, 0, 1);
+
+    a = 1; b = 0; sel = 1;
+    check_outputs(0, 1, 1, 0, 0);
+
+    a = 1; b = 1; sel = 0;
+    check_outputs(1, 1, 0, 0, 1);
+
+    a = 1; b = 1; sel = 1;
+    check_outputs(1, 1, 0, 0, 1);
+
+    if (errors == 0)
+      $display("PASS: logic_demo passed.");
+    else
+      $display("FAIL: %0d test cases failed.", errors);
+
+    $finish;
+  end
 
 endmodule
 ```
 
-### 2. Build the 8-bit adder from two blocks
+## 3. Understand DUT instantiation
 
-Add this below `cla4` in the same file:
+This:
 
 ```verilog
-module adder8 (
-  input  wire [7:0] a,
-  input  wire [7:0] b,
-  input  wire       cin,
-  output wire [7:0] sum,
-  output wire       cout
-);
-
-  wire carry4;
-
-  cla4 u_low (
-    .a    (a[3:0]),
-    .b    (b[3:0]),
-    .cin  (cin),
-    .sum  (sum[3:0]),
-    .cout (carry4)
-  );
-
-  cla4 u_high (
-    .a    (a[7:4]),
-    .b    (b[7:4]),
-    .cin  (carry4),
-    .sum  (sum[7:4]),
-    .cout (cout)
-  );
-
-endmodule
+logic_demo dut (
 ```
 
-This is a **block carry-lookahead** design: carry logic is expanded inside each four-bit block, while the carry between the lower and upper blocks still forms one block-level dependency.
+creates one instance of your RTL module inside the testbench.
 
-### 3. Test a carry-heavy input by hand
+The port connection:
 
-Try:
+```verilog
+.a(a)
+```
+
+means:
 
 ```text
-a   = 11111111
-b   = 00000001
-cin = 0
+connect testbench signal a
+to DUT port a
 ```
 
-Expected:
+Named port connections are recommended because they are easier to read and harder to mix up than positional connections.
+
+## 4. Why inputs are `reg` in this testbench
+
+The testbench assigns values procedurally:
+
+```verilog
+a = 0;
+b = 1;
+```
+
+In classic Verilog syntax, these procedurally assigned testbench signals are declared as `reg`.
+
+That does **not** automatically mean a physical flip-flop exists.
+
+Remember:
 
 ```text
-sum  = 00000000
-cout = 1
+testbench code is simulation code
 ```
 
-### 4. Add it to the ALU
+## 5. Compile the design and testbench together
 
-Your files should now be:
+Run:
+
+```bash
+cd ~/asic_101
+
+iverilog \
+  -g2012 \
+  -Wall \
+  -s logic_demo_tb \
+  -o build/logic_demo_tb.vvp \
+  rtl/logic_demo.v \
+  sim/logic_demo_tb.v
+```
+
+Then execute the simulation:
+
+```bash
+vvp build/logic_demo_tb.vvp
+```
+
+You want to see:
 
 ```text
-rtl/
-├── adder8.v
-├── alu_core.v
-└── alu_top.v
+PASS: logic_demo passed.
 ```
 
-### 5. Continue to the common flow
+## 6. What `#1` means here
 
-You are done with the adder branch.
+Inside the testbench:
 
-Continue to [Verify the complete ALU — page 7](page_7.md).
+```verilog
+#1;
+```
 
-## Results
+advances simulation time.
 
-Compared with the source structure of a Ripple Carry Adder, the lookahead equations expose more carry logic in parallel.
+We use it to allow combinational outputs to settle in the simulator before checking them.
 
-Do not assume that means it will always win on an FPGA. Vivado is free to optimize both designs for the target device, and dedicated FPGA carry hardware can strongly affect the result.
+It is a **simulation construct**.
 
-Your job later is to report what the tool actually produced.
+It is not a statement that should be placed into normal synthesizable RTL.
 
-## Checklist
+## 7. Generate a waveform
 
-- [ ] Created the `cla4` block
-- [ ] Created the top-level `adder8`
-- [ ] Did not use `a + b` inside the adder
-- [ ] Connected the adder to `alu_core`
-- [ ] Continued to page 7
+These lines:
 
----
+```verilog
+$dumpfile("build/logic_demo.vcd");
+$dumpvars(0, logic_demo_tb);
+```
 
-*Questions? Ask in the network Discord.*
+tell the simulator to record signals into:
+
+```text
+build/logic_demo.vcd
+```
+
+VCD means **Value Change Dump**.
+
+## 8. Open GTKWave
+
+Run:
+
+```bash
+gtkwave build/logic_demo.vcd
+```
+
+In GTKWave:
+
+1. expand the `logic_demo_tb` hierarchy
+2. find `a`, `b`, and `sel`
+3. add them to the signal view
+4. add `y_and`, `y_or`, `y_xor`, `y_not`, and `y_mux`
+5. zoom to fit
+
+You should see the inputs change and the outputs respond.
+
+Save a screenshot as:
+
+```text
+screenshots/logic_demo_waveform.png
+```
+
+## 9. Text checks and waveforms have different jobs
+
+A self-checking testbench tells you:
+
+```text
+PASS
+or
+FAIL
+```
+
+A waveform helps you answer:
+
+```text
+why?
+```
+
+For larger designs, you generally want both.
+
+## 10. Learn what an `x` means
+
+HDL simulators can represent:
+
+```text
+x = unknown
+```
+
+An `x` often appears because:
+
+- a register was never reset
+- a signal was never assigned
+- multiple conflicting drivers exist
+- unknown data propagated through logic
+
+Do not automatically ignore `x`.
+
+It is often telling you that the testbench or RTL has a real problem.
+
+## Checkpoint
+
+You should have:
+
+```text
+sim/logic_demo_tb.v
+build/logic_demo_tb.vvp
+build/logic_demo.vcd
+screenshots/logic_demo_waveform.png
+```
+
+and:
+
+```bash
+vvp build/logic_demo_tb.vvp
+```
+
+should report PASS.
+
+## Before continuing
+
+You should understand:
+
+- DUT
+- testbench
+- simulation-only code
+- self-checking tests
+- VCD waveforms
+- why waveforms help debug failures

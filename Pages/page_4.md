@@ -1,134 +1,283 @@
-# Option A: Ripple Carry Adder
+# Page 4 — Your first Verilog hardware
 
-The Ripple Carry Adder is the simplest adder option. Each bit waits for the carry from the bit before it, making the structure easy to understand and easy to verify.
+## What you are learning
 
-## Overview
+This page teaches enough Verilog to describe simple combinational hardware.
 
-A one-bit full adder has three inputs:
+You will create and compile your first RTL module.
 
-```text
-a
-b
-carry-in
+## 1. Create the file
+
+From the course root:
+
+```bash
+cd ~/asic_101
 ```
 
-and two outputs:
+Create:
 
 ```text
-sum
-carry-out
+rtl/logic_demo.v
 ```
 
-The logic is
-
-```text
-sum  = a XOR b XOR cin
-
-cout = (a AND b)
-     OR (a AND cin)
-     OR (b AND cin)
-```
-
-An 8-bit Ripple Carry Adder chains eight of these stages.
-
-```text
-cin -> bit 0 -> bit 1 -> bit 2 -> ... -> bit 7 -> cout
-```
-
-The important idea is that a carry may have to propagate through every stage.
-
-## Prerequisites
-
-- [ALU specification](page_3.md)
-- Boolean AND, OR, XOR
-- one-bit full adders
-
-## Steps
-
-### 1. Create `rtl/adder8.v`
+Put this inside:
 
 ```verilog
-module adder8 (
-  input  wire [7:0] a,
-  input  wire [7:0] b,
-  input  wire       cin,
-  output wire [7:0] sum,
-  output wire       cout
+module logic_demo (
+  input  wire a,
+  input  wire b,
+  input  wire sel,
+
+  output wire y_and,
+  output wire y_or,
+  output wire y_xor,
+  output wire y_not,
+  output wire y_mux
 );
 
-  wire [8:0] c;
+  assign y_and = a & b;
+  assign y_or  = a | b;
+  assign y_xor = a ^ b;
+  assign y_not = ~a;
 
-  assign c[0] = cin;
-
-  genvar i;
-  generate
-    for (i = 0; i < 8; i = i + 1) begin : GEN_FULL_ADDER
-      assign sum[i] = a[i] ^ b[i] ^ c[i];
-
-      assign c[i+1] =
-          (a[i] & b[i]) |
-          (a[i] & c[i]) |
-          (b[i] & c[i]);
-    end
-  endgenerate
-
-  assign cout = c[8];
+  assign y_mux = sel ? b : a;
 
 endmodule
 ```
 
-### 2. Trace one carry by hand
+Save the file.
 
-Try:
+## 2. Understand the module
 
-```text
-a   = 01111111
-b   = 00000001
-cin = 0
+A module is a reusable hardware block.
+
+This line starts the definition:
+
+```verilog
+module logic_demo (
 ```
 
-The result should be
+The signals listed inside the parentheses are **ports**.
 
-```text
-sum  = 10000000
-cout = 0
+For example:
+
+```verilog
+input wire a
 ```
 
-Several carry signals must ripple through the design before the final sum settles.
-
-### 3. Add it to the ALU
-
-Make sure your files are
+means:
 
 ```text
-rtl/
-├── adder8.v
-├── alu_core.v
-└── alu_top.v
+a is a one-bit input to this module
 ```
 
-Do not rename the module. `alu_core.v` expects a module named `adder8`.
+and:
 
-### 4. Continue to the common flow
+```verilog
+output wire y_and
+```
 
-You are done with the adder branch.
+means:
 
-Continue to [Verify the complete ALU — page 7](page_7.md).
+```text
+y_and is a one-bit output
+```
 
-## Results
+## 3. `assign` describes continuous hardware
 
-The Ripple Carry Adder is a useful baseline because it uses a simple repeated structure.
+This line:
 
-Later, record what Vivado actually maps it into. FPGA synthesis may transform your RTL and use device-specific carry resources, so do not assume the post-synthesis hardware will look exactly like the source code.
+```verilog
+assign y_and = a & b;
+```
 
-## Checklist
+means that `y_and` is continuously driven by combinational logic.
 
-- [ ] Created `adder8.v`
-- [ ] Did not use `a + b` inside the adder
-- [ ] Understand how the carry ripples
-- [ ] Connected the adder to `alu_core`
-- [ ] Continued to page 7
+If `a` or `b` changes, the logical value of `y_and` changes accordingly.
 
----
+These lines all describe hardware that conceptually exists at the same time:
 
-*Questions? Ask in the network Discord.*
+```verilog
+assign y_and = a & b;
+assign y_or  = a | b;
+assign y_xor = a ^ b;
+assign y_not = ~a;
+```
+
+Verilog source order does not mean “execute the first assignment, then the second.”
+
+This is one of the biggest mental shifts from software programming.
+
+## 4. The conditional operator is a mux
+
+This line:
+
+```verilog
+assign y_mux = sel ? b : a;
+```
+
+means:
+
+```text
+if sel = 0, connect a to y_mux
+if sel = 1, connect b to y_mux
+```
+
+That describes a 2-to-1 multiplexer.
+
+A mux is a hardware selector.
+
+## 5. Compile the module
+
+Run:
+
+```bash
+mkdir -p build
+
+iverilog \
+  -g2012 \
+  -Wall \
+  -s logic_demo \
+  -o build/logic_demo.vvp \
+  rtl/logic_demo.v
+```
+
+If everything is correct, the command may print nothing.
+
+That is good.
+
+The compiler created:
+
+```text
+build/logic_demo.vvp
+```
+
+At this point we have only checked that the module compiles.
+
+We have not tested whether its behavior is correct.
+
+That is the job of a testbench.
+
+## 6. Make an intentional syntax error
+
+This is worth doing once.
+
+Temporarily change:
+
+```verilog
+assign y_and = a & b;
+```
+
+to something invalid, for example:
+
+```verilog
+assign y_and = a & ;
+```
+
+Run the compile command again.
+
+Icarus should report an error and point near the broken line.
+
+Restore the correct code afterward.
+
+Hardware designers spend a lot of time reading tool errors. Learning to make one on purpose makes them less mysterious.
+
+## 7. Comments
+
+Use:
+
+```verilog
+// one-line comment
+```
+
+or:
+
+```verilog
+/*
+multi-line
+comment
+*/
+```
+
+Comments do not create hardware.
+
+Use comments to explain **why** something is implemented a certain way, not to repeat obvious syntax.
+
+## 8. Buses
+
+One-bit signals are useful, but most real datapaths use buses.
+
+Example:
+
+```verilog
+input wire [7:0] a;
+```
+
+means an 8-bit input.
+
+Bit selection:
+
+```verilog
+a[0]
+a[7]
+```
+
+Slice selection:
+
+```verilog
+a[3:0]
+a[7:4]
+```
+
+You will use this in the adder and ALU.
+
+## 9. A rule for this course
+
+Keep **synthesizable RTL** inside `rtl/`.
+
+Keep **simulation-only code** inside `sim/`.
+
+For now, do not put delays such as:
+
+```verilog
+#10
+```
+
+inside your RTL modules.
+
+Delays are useful in testbenches, but they are not how we describe the physical delay of real synthesized hardware.
+
+## Checkpoint
+
+Your project should now include:
+
+```text
+asic_101/
+├── rtl/
+│   └── logic_demo.v
+├── sim/
+├── scripts/
+├── build/
+├── reports/
+└── screenshots/
+```
+
+and this should compile:
+
+```bash
+iverilog -g2012 -Wall -s logic_demo \
+  -o build/logic_demo.vvp \
+  rtl/logic_demo.v
+```
+
+## Before continuing
+
+You should be able to explain:
+
+- what a module is
+- what an input and output port are
+- why multiple `assign` statements describe simultaneous hardware
+- what the mux expression does
+- what `[7:0]` means
+
+Next: actually test the hardware.

@@ -1,117 +1,326 @@
-# ASIC 101 project: build an 8-bit ALU
+# Page 2 — Set up the open-source lab
 
-This project is your first complete hardware-design flow in Vivado. You will build one 8-bit ALU, choose one adder architecture, verify it, synthesize it, implement it, and collect timing, utilization, and power results.
+## What you are learning
 
-## Overview
+On this page you will install the tools used for the first half of ASIC 101 and create the project directory that every later page will use.
 
-The project has one common specification, but you get to choose how the arithmetic hardware is built.
+## 1. The tools
 
-Everyone completes the same ALU. The only branch is the adder:
+We will use:
 
-| adder | difficulty | go to |
-|-------|------------|-------|
-| Ripple Carry Adder | beginner | [page 4](page_4.md) |
-| Carry Lookahead Adder | intermediate | [page 5](page_5.md) |
-| Carry Select Adder | intermediate | [page 6](page_6.md) |
+| Tool | Purpose |
+| --- | --- |
+| Icarus Verilog | Compile and simulate Verilog |
+| `vvp` | Execute simulations compiled by Icarus |
+| GTKWave | View waveforms |
+| Yosys | Synthesize RTL |
+| Graphviz | Render Yosys schematics |
+| Git | Track your source code |
 
-You only need to complete **one** adder.
+The easiest way to get the EDA tools together is **OSS CAD Suite**.
 
-After your adder works, everyone returns to [page 7](page_7.md) for verification.
+OSS CAD Suite includes Yosys, Icarus Verilog, GTKWave, Verilator, formal tools, FPGA tools, and other open-source digital-design software.
 
-Your final repository should contain:
+## 2. Install OSS CAD Suite
+
+Go to the official release page:
+
+https://github.com/YosysHQ/oss-cad-suite-build/releases/latest
+
+Download the archive matching your operating system.
+
+Typical choices are:
+
+```text
+linux-x64
+darwin-arm64
+windows-x64
+```
+
+If you are on Windows and are comfortable with WSL, the OSS CAD Suite maintainers recommend using the Linux build inside WSL for the best experience.
+
+Extract the archive somewhere you will keep it.
+
+For example, on Linux:
+
+```bash
+mkdir -p ~/tools
+cd ~/tools
+```
+
+Extract the downloaded archive so that you eventually have a directory similar to:
+
+```text
+~/tools/oss-cad-suite/
+```
+
+Activate it:
+
+```bash
+source ~/tools/oss-cad-suite/environment
+```
+
+You must do this in each new terminal unless you add the command to your shell startup file.
+
+### Optional: activate it automatically
+
+For Bash:
+
+```bash
+echo 'source ~/tools/oss-cad-suite/environment' >> ~/.bashrc
+source ~/.bashrc
+```
+
+If your installation is somewhere else, change the path.
+
+## 3. Install Git
+
+If Git is not already installed, use your operating system's package manager.
+
+Ubuntu/Debian:
+
+```bash
+sudo apt update
+sudo apt install -y git
+```
+
+Git is open-source and will be used to track your progress.
+
+## 4. Verify the EDA tools
+
+Run:
+
+```bash
+iverilog -V
+vvp -V
+yosys -V
+gtkwave --version
+dot -V
+```
+
+Version numbers will change over time.
+
+The important result is:
+
+```text
+each command exists and runs
+```
+
+If your terminal says:
+
+```text
+command not found
+```
+
+the OSS CAD Suite environment is probably not active.
+
+Run:
+
+```bash
+source ~/tools/oss-cad-suite/environment
+```
+
+again.
+
+## 5. Choose a text editor
+
+Use any editor you are comfortable with.
+
+Open-source choices include:
+
+```text
+VSCode
+VSCodium
+Neovim
+Vim
+Emacs
+Kate
+```
+
+The editor is not part of the EDA flow. It only edits text files.
+
+## 6. Create the project
+
+Run:
+
+```bash
+mkdir -p ~/asic_101
+cd ~/asic_101
+
+mkdir -p rtl
+mkdir -p sim
+mkdir -p scripts
+mkdir -p build
+mkdir -p reports
+mkdir -p screenshots
+```
+
+Your project should now look like:
 
 ```text
 asic_101/
 ├── rtl/
-│   ├── adder8.v
-│   ├── alu_core.v
-│   └── alu_top.v
 ├── sim/
-│   └── alu_tb.v
-├── constr/
-│   └── alu.xdc
+├── scripts/
+├── build/
 ├── reports/
-├── screenshots/
-└── README.md
+└── screenshots/
 ```
 
-By the end, you should have:
+The folders have different jobs.
 
-- a working 8-bit ALU
-- an automated testbench
-- a synthesized Vivado design
-- a routed Vivado implementation
-- utilization results
-- timing results
-- power results
-- a short engineering interpretation of the results
+### `rtl/`
 
-## Prerequisites
+Synthesizable hardware source code.
 
-- AMD Vivado
-- basic Verilog
-- a target AMD/Xilinx FPGA part or board
-- Git
-- prior page: [What an ASIC is, and what we're building](page_1.md)
+### `sim/`
 
-You do **not** need to program a physical FPGA board for this project. Vivado is being used as the synthesis, implementation, timing, and power-analysis environment.
+Testbenches and simulation-only code.
 
-## Steps
+### `scripts/`
 
-1. Create a folder named `asic_101`.
+Yosys and later EDA scripts.
 
-2. Create the directory structure shown above.
+### `build/`
 
-3. Open Vivado and select **Create Project**.
+Generated temporary output.
 
-4. Create an **RTL Project**.
+### `reports/`
 
-5. Select the FPGA board or part assigned by your university/team.
+Tool reports worth keeping.
 
-6. Do not add RTL yet if you have not written it.
+### `screenshots/`
 
-7. Continue to the ALU specification on [page 3](page_3.md).
+Visual evidence from waveforms and layout.
 
-## Project rules
+## 7. Initialize Git
 
-For the arithmetic block:
+Still inside `~/asic_101`:
 
-- You must choose exactly one adder architecture from pages 4–6.
-- Your adder module must be named `adder8`.
-- It must use the interface shown on page 3.
-- Do not use `a + b` inside `adder8`.
-- Do not use a vendor adder IP block.
-- The `+` operator is allowed inside the **testbench** to calculate expected answers.
-- Your chosen adder must perform both ADD and SUB operations inside the ALU.
+```bash
+git init
+```
 
-The rest of the ALU may use normal Verilog operators.
+Create a `.gitignore`:
 
-## Results
+```bash
+cat > .gitignore <<'EOF'
+build/
+*.vcd
+*.fst
+*.log
+EOF
+```
 
-At the end of the project, your README will contain a table like this:
+Create a small README:
 
-| metric | result |
-|--------|-------:|
-| Adder architecture | — |
-| LUTs | — |
-| Flip-flops | — |
-| Carry resources | — |
-| Worst Negative Slack | — |
-| Total Negative Slack | — |
-| Total on-chip power | — |
-| Dynamic power | — |
-| Static power | — |
+```bash
+cat > README.md <<'EOF'
+# ASIC 101
 
-Do not fill these values in yet.
+Open-source ASIC 101 project.
 
-## Checklist
+Goal: design, verify, synthesize, and physically implement an 8-bit ALU.
+EOF
+```
 
-- [ ] Created the project folder
-- [ ] Created the Vivado RTL project
-- [ ] Selected a target FPGA
-- [ ] Read the project rules
-- [ ] Continued to page 3
+Commit the starting point:
 
----
+```bash
+git add .
+git commit -m "Start ASIC 101 project"
+```
 
-*Questions? Ask in the network Discord.*
+If Git asks you to configure your name or email, follow the commands it prints and repeat the commit.
+
+## 8. Learn four shell commands
+
+You only need a small amount of terminal knowledge to start.
+
+Show the current directory:
+
+```bash
+pwd
+```
+
+List files:
+
+```bash
+ls
+```
+
+Change directory:
+
+```bash
+cd rtl
+```
+
+Go back one directory:
+
+```bash
+cd ..
+```
+
+That is enough for the next several pages.
+
+## Checkpoint
+
+Run:
+
+```bash
+cd ~/asic_101
+pwd
+ls
+iverilog -V
+yosys -V
+```
+
+You should see your project directory and working tool versions.
+
+## Common problems
+
+### `iverilog: command not found`
+
+Activate OSS CAD Suite again:
+
+```bash
+source ~/tools/oss-cad-suite/environment
+```
+
+### GTKWave does not open from WSL
+
+On modern Windows systems with WSLg, Linux GUI applications normally work directly.
+
+If your environment does not support Linux GUI applications, you can still complete simulations from the terminal and open waveform files with a waveform viewer available on your host system.
+
+### Spaces in paths
+
+Avoid putting the toolchain or course project in paths with complicated spaces or special characters.
+
+A simple location such as:
+
+```text
+~/asic_101
+```
+
+avoids many beginner problems.
+
+## Before continuing
+
+Your system is ready when all of these are true:
+
+- [ ] `iverilog -V` works
+- [ ] `vvp -V` works
+- [ ] `yosys -V` works
+- [ ] `gtkwave --version` works
+- [ ] `dot -V` works
+- [ ] `~/asic_101` exists
+- [ ] the project contains `rtl`, `sim`, `scripts`, `build`, `reports`, and `screenshots`
+- [ ] Git is initialized
+
+## References
+
+- OSS CAD Suite: https://github.com/YosysHQ/oss-cad-suite-build
+- Icarus Verilog: https://steveicarus.github.io/iverilog/
+- GTKWave: https://gtkwave.github.io/gtkwave/
+- Yosys: https://yosyshq.readthedocs.io/

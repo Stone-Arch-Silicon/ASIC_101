@@ -1,172 +1,358 @@
-# Verify the complete ALU
+# Page 7 — Build an 8-bit adder and learn subtraction
 
-Before synthesis, prove that the RTL is functionally correct. The testbench checks all 524,288 combinations of `a`, `b`, and `op`.
+## What you are learning
 
-## Overview
-
-There are
+Arithmetic looks simple in software:
 
 ```text
-256 possible values of a
-256 possible values of b
-8 possible operations
+a + b
 ```
 
-so the complete ALU input space is
+Hardware still has to implement the addition.
+
+This page teaches:
+
+- half adders
+- full adders
+- carry
+- ripple-carry addition
+- two's-complement subtraction
+- carry versus borrow
+- signed overflow
+
+You will build the arithmetic block used by the ALU.
+
+## 1. One-bit addition
+
+Start with:
 
 ```text
-256 × 256 × 8 = 524,288 test vectors
+0 + 0 = 0
+0 + 1 = 1
+1 + 0 = 1
+1 + 1 = 10
 ```
 
-Because this ALU is small, exhaustive simulation is practical.
+The result of `1 + 1` needs two bits:
 
-The testbench is allowed to use normal Verilog arithmetic to calculate the expected result. The design under test is still required to use your custom `adder8`.
+```text
+sum bit   = 0
+carry bit = 1
+```
 
-## Prerequisites
+## 2. Full adder
 
-Complete exactly one adder page:
+When adding multi-bit numbers, each bit may also receive a carry from the previous bit.
 
-- [Ripple Carry](page_4.md)
-- [Carry Lookahead](page_5.md)
-- [Carry Select](page_6.md)
+A full adder has:
 
-You should also have:
+```text
+a
+b
+cin
+```
+
+and produces:
+
+```text
+sum
+cout
+```
+
+The equations are:
+
+```text
+sum  = a XOR b XOR cin
+
+cout = (a AND b) OR (a AND cin) OR (b AND cin)
+```
+
+## 3. Ripple-carry addition
+
+To add 8-bit numbers, connect eight full-adder stages.
+
+```text
+cin -> bit 0 -> carry -> bit 1 -> carry -> bit 2 -> ... -> bit 7
+```
+
+The carry can “ripple” through the chain.
+
+That is why this architecture is called a **Ripple Carry Adder**.
+
+It is not always the fastest possible adder, but it is an excellent first architecture because its behavior is easy to understand.
+
+## 4. Create `adder8`
+
+Create:
 
 ```text
 rtl/adder8.v
-rtl/alu_core.v
-rtl/alu_top.v
 ```
 
-## Steps
+with:
 
-### 1. Create `sim/alu_tb.v`
+```verilog
+module adder8 (
+  input  wire [7:0] a,
+  input  wire [7:0] b,
+  input  wire       cin,
+
+  output wire [7:0] sum,
+  output wire       cout
+);
+
+  wire [8:0] c;
+
+  assign c[0] = cin;
+
+  genvar i;
+  generate
+    for (i = 0; i < 8; i = i + 1) begin : GEN_FULL_ADDER
+
+      assign sum[i] = a[i] ^ b[i] ^ c[i];
+
+      assign c[i+1] = (a[i] & b[i]) | (a[i] & c[i]) | (b[i] & c[i]);
+    end
+  endgenerate
+
+  assign cout = c[8];
+
+endmodule
+```
+
+Notice that the RTL does not use:
+
+```verilog
+a + b
+```
+
+inside the design.
+
+We are explicitly describing the full-adder structure.
+
+## 5. Trace one example
+
+Try:
+
+```text
+a   = 01111111
+b   = 00000001
+cin = 0
+```
+
+The expected sum is:
+
+```text
+10000000
+```
+
+The carry has to propagate through many low-order bits before the final result is known.
+
+That long dependency is why ripple-carry adders become slower as width increases.
+
+## 6. Subtraction using the same adder
+
+Two's-complement arithmetic gives us:
+
+```text
+a - b = a + (~b) + 1
+```
+
+That means we can reuse the adder for subtraction.
+
+Create a signal:
+
+```text
+sub
+```
+
+If:
+
+```text
+sub = 0
+```
+
+we want:
+
+```text
+a + b + 0
+```
+
+If:
+
+```text
+sub = 1
+```
+
+we want:
+
+```text
+a + ~b + 1
+```
+
+A convenient hardware trick is:
+
+```verilog
+b_arith = b ^ {8{sub}};
+```
+
+Why?
+
+When `sub = 0`:
+
+```text
+b XOR 00000000 = b
+```
+
+When `sub = 1`:
+
+```text
+b XOR 11111111 = ~b
+```
+
+Then connect:
+
+```text
+cin = sub
+```
+
+One control bit gives us both ADD and SUB.
+
+## 7. Carry-out during subtraction
+
+When subtraction is implemented as:
+
+```text
+a + (~b) + 1
+```
+
+the carry-out has a convention that sometimes surprises beginners.
+
+For this implementation:
+
+```text
+carry = 1
+```
+
+generally corresponds to:
+
+```text
+no borrow
+```
+
+Do not assume “carry” and “borrow” are identical concepts.
+
+The meaning of a status flag must be defined by the interface specification.
+
+## 8. Signed overflow
+
+Carry-out is not the same as signed overflow.
+
+Example:
+
+```text
+127 + 1
+```
+
+in 8-bit signed arithmetic:
+
+```text
+01111111
++00000001
+---------
+10000000
+```
+
+The bit pattern `10000000` represents `-128`.
+
+Two positive numbers produced a negative result.
+
+That is signed overflow.
+
+For 8-bit addition:
+
+```verilog
+overflow_add = (~(a[7] ^ b[7])) & (sum[7] ^ a[7]);
+```
+
+For subtraction:
+
+```verilog
+overflow_sub = (a[7] ^ b[7]) & (sum[7] ^ a[7]);
+```
+
+You will use these expressions in the ALU.
+
+## 9. Exhaustively test the adder
+
+Create:
+
+```text
+sim/adder8_tb.v
+```
+
+with:
 
 ```verilog
 `timescale 1ns/1ps
 
-module alu_tb;
+module adder8_tb;
 
   reg  [7:0] a;
   reg  [7:0] b;
-  reg  [2:0] op;
+  reg        cin;
 
-  wire [7:0] y;
-  wire       carry;
-  wire       overflow;
-  wire       zero;
-  wire       negative;
+  wire [7:0] sum;
+  wire       cout;
 
-  reg  [7:0] exp_y;
-  reg        exp_carry;
-  reg        exp_overflow;
-  reg        exp_zero;
-  reg        exp_negative;
-  reg  [8:0] tmp;
+  reg  [8:0] expected;
 
   integer ia;
   integer ib;
-  integer iop;
+  integer ic;
   integer errors;
 
-  alu_core dut (
-    .a        (a),
-    .b        (b),
-    .op       (op),
-    .y        (y),
-    .carry    (carry),
-    .overflow (overflow),
-    .zero     (zero),
-    .negative (negative)
+  adder8 dut (
+    .a    (a),
+    .b    (b),
+    .cin  (cin),
+    .sum  (sum),
+    .cout (cout)
   );
-
-  task check_current;
-    begin
-      exp_y        = 8'h00;
-      exp_carry    = 1'b0;
-      exp_overflow = 1'b0;
-      tmp          = 9'h000;
-
-      case (op)
-        3'b000: begin
-          tmp          = {1'b0, a} + {1'b0, b};
-          exp_y        = tmp[7:0];
-          exp_carry    = tmp[8];
-          exp_overflow = (~(a[7] ^ b[7])) & (exp_y[7] ^ a[7]);
-        end
-
-        3'b001: begin
-          tmp          = {1'b0, a} + {1'b0, (~b)} + 9'd1;
-          exp_y        = tmp[7:0];
-          exp_carry    = tmp[8];
-          exp_overflow = (a[7] ^ b[7]) & (exp_y[7] ^ a[7]);
-        end
-
-        3'b010: exp_y = a & b;
-        3'b011: exp_y = a | b;
-        3'b100: exp_y = a ^ b;
-        3'b101: exp_y = ~a;
-        3'b110: exp_y = a << 1;
-        3'b111: exp_y = a >> 1;
-      endcase
-
-      exp_zero     = (exp_y == 8'h00);
-      exp_negative = exp_y[7];
-
-      #1;
-
-      if (
-        (y        !== exp_y)        ||
-        (carry    !== exp_carry)    ||
-        (overflow !== exp_overflow) ||
-        (zero     !== exp_zero)     ||
-        (negative !== exp_negative)
-      ) begin
-
-        if (errors < 20) begin
-          $display(
-            "FAIL op=%b a=%h b=%h | y=%h c=%b v=%b z=%b n=%b | expected y=%h c=%b v=%b z=%b n=%b",
-            op, a, b,
-            y, carry, overflow, zero, negative,
-            exp_y, exp_carry, exp_overflow, exp_zero, exp_negative
-          );
-        end
-
-        errors = errors + 1;
-      end
-    end
-  endtask
 
   initial begin
     errors = 0;
-    a      = 8'h00;
-    b      = 8'h00;
-    op     = 3'b000;
 
-    // A few recognizable vectors appear at the beginning of the waveform.
-    a = 8'h01; b = 8'h01; op = 3'b000; check_current;
-    a = 8'h7F; b = 8'h01; op = 3'b000; check_current;
-    a = 8'h00; b = 8'h01; op = 3'b001; check_current;
-    a = 8'hAA; b = 8'h55; op = 3'b100; check_current;
-    a = 8'h81; b = 8'h00; op = 3'b110; check_current;
-    a = 8'h81; b = 8'h00; op = 3'b111; check_current;
-
-    // Exhaustive verification.
-    for (iop = 0; iop < 8; iop = iop + 1) begin
+    for (ic = 0; ic < 2; ic = ic + 1) begin
       for (ia = 0; ia < 256; ia = ia + 1) begin
         for (ib = 0; ib < 256; ib = ib + 1) begin
-          op = iop[2:0];
-          a  = ia[7:0];
-          b  = ib[7:0];
-          check_current;
+
+          a   = ia[7:0];
+          b   = ib[7:0];
+          cin = ic[0];
+
+          expected = {1'b0, a} + {1'b0, b} + cin;
+
+          #1;
+
+          if ({cout, sum} !== expected) begin
+            if (errors < 20) begin
+              $display(
+                "FAIL a=%h b=%h cin=%b got=%b_%h expected=%h",
+                a, b, cin, cout, sum, expected
+              );
+            end
+            errors = errors + 1;
+          end
+
         end
       end
     end
 
     if (errors == 0)
-      $display("PASS: all 524288 exhaustive ALU vectors passed.");
+      $display("PASS: all adder input combinations passed.");
     else
-      $display("FAIL: %0d vectors failed.", errors);
+      $display("FAIL: %0d adder cases failed.", errors);
 
     $finish;
   end
@@ -174,89 +360,42 @@ module alu_tb;
 endmodule
 ```
 
-### 2. Add the simulation source in Vivado
+Compile and run:
 
-Under **Simulation Sources**:
+```bash
+iverilog \
+  -g2012 \
+  -Wall \
+  -s adder8_tb \
+  -o build/adder8_tb.vvp \
+  rtl/adder8.v \
+  sim/adder8_tb.v
 
-1. add `sim/alu_tb.v`
-2. set `alu_tb` as the simulation top
-3. keep `alu_top` as the synthesis top
-
-The testbench intentionally instantiates `alu_core` directly so the combinational logic can be exhaustively checked without worrying about pipeline latency.
-
-### 3. Run Behavioral Simulation
-
-In Flow Navigator:
-
-```text
-Simulation
-→ Run Simulation
-→ Run Behavioral Simulation
+vvp build/adder8_tb.vvp
 ```
 
-Run until the testbench reaches `$finish`.
-
-You want to see:
+You want:
 
 ```text
-PASS: all 524288 exhaustive ALU vectors passed.
+PASS: all adder input combinations passed.
 ```
 
-### 4. Inspect the waveform
-
-Zoom in near the beginning of the simulation.
-
-Find at least:
-
-- one ADD
-- one SUB
-- one bitwise operation
-- one shift
-
-Confirm that the waveform matches what you expect.
-
-### 5. Save evidence
-
-Save:
+There are:
 
 ```text
-screenshots/simulation.png
+256 × 256 × 2 = 131,072
 ```
 
-The screenshot should show:
+possible combinations of `a`, `b`, and `cin`.
 
-- `a`
-- `b`
-- `op`
-- `y`
-- the four flags
+This testbench checks all of them.
 
-Also save or screenshot the final PASS message.
+## Before continuing
 
-Do not continue to synthesis with known simulation failures.
+You should understand:
 
-## Results
-
-Your project should now pass functional verification before implementation.
-
-| verification item | expected result |
-|-------------------|-----------------|
-| Directed vectors | pass |
-| Exhaustive vectors | 524,288 pass |
-| ADD/SUB flags | pass |
-| Waveform inspected | yes |
-
-## Checklist
-
-- [ ] Added `alu_tb.v`
-- [ ] Set the correct simulation top
-- [ ] Behavioral simulation completed
-- [ ] All 524,288 exhaustive vectors passed
-- [ ] Saved a waveform screenshot
-- [ ] Continued to page 8
-
-Continue to [Synthesize and implement in Vivado](page_8.md).
-
----
-
-*Questions? Ask in the network Discord.*
+- how a full adder works
+- why carry ripples through this architecture
+- how one adder can implement subtraction
+- why carry and signed overflow are different
+- why exhaustive verification is practical for a small block

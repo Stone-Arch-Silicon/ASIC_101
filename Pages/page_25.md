@@ -1,332 +1,454 @@
-# Final RTL-to-GDS submission and tapeout-readiness checklist
+# Page 25 — Final submission: reproducibility, engineering handoff, and tapeout readiness
 
-Package the complete project so another engineer can reproduce the design, inspect every major stage, verify the signoff results, and understand what remains before actual fabrication.
+## What you are learning
 
-## Overview
-
-A successful tutorial result is not just:
+The final product of ASIC 101 is not merely:
 
 ```text
 alu_top.gds
 ```
 
-A strong ASIC deliverable includes:
+A professional hardware project must be understandable and reproducible by another engineer.
+
+Your final submission should answer:
 
 ```text
-source
-constraints
-configuration
-run metadata
-physical views
-timing data
-parasitics
-verification reports
-PPA metrics
-engineering interpretation
+What did you design?
+How do we know the logic is correct?
+How was it implemented?
+Which tools and PDK were used?
+What timing/area/power results were obtained?
+Which physical checks passed?
+What failed or remains uncertain?
+Can another person reproduce it?
+What remains before real fabrication?
 ```
 
-### Hardened macro vs full chip
+## 1. Final repository structure
 
-Your `alu_top` is a hardened digital block.
-
-It is not automatically a full standalone chip with:
+A strong repository may look like:
 
 ```text
-pad ring
-ESD
-package
-power pads
-clock pad
-reset pad
-bond wires
-bumps
-shuttle wrapper
-foundry delivery package
-```
-
-A higher-level design can integrate the macro using abstract views such as LEF plus timing models and connect it into a full-chip implementation.
-
-### "GDS exists" is not signoff
-
-Before a fabrication submission, the relevant project must satisfy the actual foundry/shuttle signoff requirements.
-
-For this class, you will demonstrate the corresponding open-source checks and clearly state their status.
-
-## Prerequisites
-
-- [adder and optimization experiments](page_24.md)
-
-## Steps
-
-### 1. Final repository structure
-
-A good repository looks like:
-
-```text
-asic_101_gds/
+asic_101/
 ├── rtl/
 │   ├── adder8.v
 │   ├── alu_core.v
 │   └── alu_top.v
+├── rtl_variants/
+│   ├── ripple/
+│   ├── cla/
+│   └── carry_select/
+├── sim/
+│   ├── adder8_tb.v
+│   ├── alu_tb.v
+│   └── alu_wave_tb.v
+├── scripts/
+│   └── synth.ys
+├── asic/
+│   └── config.json
+├── asic_variants/
+│   ├── ripple/
+│   ├── cla/
+│   └── carry_select/
+├── build/
+├── reports/
+│   ├── asic_environment.txt
+│   ├── baseline_config.json
+│   ├── baseline_run_tag.txt
+│   ├── sky130_cell_counts.txt
+│   ├── ppa_baseline.md
+│   ├── signoff_summary.md
+│   ├── file_format_cheatsheet.md
+│   └── adder_architecture_comparison.md
 ├── screenshots/
-│   ├── baseline_gds.png
-│   ├── synthesis_cells.png
-│   ├── floorplan.png
-│   ├── tap_endcap.png
-│   ├── pdn.png
-│   ├── global_placement.png
-│   ├── detailed_placement.png
-│   ├── congestion_heatmap.png
-│   ├── clock_tree.png
-│   ├── global_routing.png
-│   ├── detailed_routing.png
-│   ├── metal_layers.png
-│   ├── worst_setup_path.png
-│   ├── worst_hold_path.png
-│   ├── drc_clean.png
-│   └── lvs_clean.png
-├── config.json
+│   ├── 01_floorplan.png
+│   ├── 02_pdn.png
+│   ├── 03_placement.png
+│   ├── 04_clock_tree.png
+│   ├── 05_routing.png
+│   └── 06_final_gds.png
 └── README.md
 ```
 
-Do not commit giant disposable run directories unless your team specifically wants them in Git.
+You do **not** need to commit every huge temporary run artifact if that makes the repository impractical.
 
-Instead, archive or publish the required final reports/views according to the network submission instructions.
+But another engineer must have enough source, configuration, versions, and evidence to reproduce the flow.
 
-### 2. Record reproducibility metadata
+## 2. Record the exact source revision
 
-In README:
+Before final submission:
 
 ```bash
-librelane --version
-yosys -V
-openroad -version
+cd ~/asic_101
+git status
+git rev-parse HEAD
 ```
 
-Also record:
+Store the commit hash in your final report.
+
+If you have uncommitted design changes, the hash alone does not describe what you ran.
+
+A reproducible result should correspond to a clean, identifiable source state.
+
+## 3. Record the tool environment
+
+Your Page 12 file:
 
 ```text
-PDK
-standard-cell library
+reports/asic_environment.txt
+```
+
+should include at least:
+
+```text
+LibreLane version
+Yosys version
+OpenROAD version
+date
+```
+
+Also record the PDK and SCL:
+
+```text
+sky130A
+sky130_fd_sc_hd
+```
+
+If your LibreLane run records a resolved configuration or PDK revision, preserve that information too.
+
+## 4. Record the exact configuration
+
+Never report physical results without keeping the configuration that produced them.
+
+Your final handoff should make it possible to answer:
+
+```text
+What clock period?
+What die/core size?
+What PDK?
+What standard-cell library?
+What RTL files?
+What density/utilization settings?
+```
+
+## 5. Verification evidence
+
+Your README should state the functional verification status explicitly.
+
+For example:
+
+```text
+Adder unit test: PASS
+ALU directed waveform test: PASS
+ALU exhaustive combinational regression: PASS — 524,288 vectors
+```
+
+If you changed adder architectures, each one should pass the same functional contract before its physical metrics are considered.
+
+## 6. PPA evidence
+
+Include your baseline table and architecture-comparison table.
+
+For each metric, identify:
+
+```text
+value
+unit
+corner/assumption where relevant
+source report or metric file
+```
+
+Do not write:
+
+```text
+power = 0.42
+```
+
+Write something more defensible:
+
+```text
+estimated power = 0.42 mW
+source = <report>
+corner/activity assumptions = <what the flow used>
+```
+
+if that information is available.
+
+## 7. Timing evidence
+
+Record:
+
+```text
 clock period
-adder architecture
-date of run
+worst setup slack
+worst hold slack
+critical-path startpoint
+critical-path endpoint
+whether timing closed
 ```
 
-Keep the run's:
+If setup or hold fails, say so.
+
+A failed timing result does not make the educational project worthless.
+
+Hiding it does.
+
+## 8. Physical-verification evidence
+
+Include a table like:
+
+```markdown
+| Check | Result | Evidence |
+|---|---|---|
+| Detailed routing | PASS/FAIL | |
+| Antenna | PASS/FAIL | |
+| DRC | PASS/FAIL | |
+| LVS | PASS/FAIL | |
+| Setup timing | PASS/FAIL | |
+| Hold timing | PASS/FAIL | |
+```
+
+Do not use the word `PASS` unless you can point to evidence.
+
+## 9. Explain the critical path
+
+A strong final report does not only state slack.
+
+Explain what the path physically contains.
+
+For example:
 
 ```text
-resolved.json
+input register
+→ arithmetic/carry logic
+→ result-selection muxing
+→ output register
 ```
 
-with your archived submission when requested.
+Then explain whether cell delay or wire delay is significant.
 
-### 3. Final PPA table
+If your architectural experiment changed the critical path, explain that too.
 
-```markdown
-| metric | value |
-|--------|------:|
-| Adder architecture | |
-| PDK | sky130A |
-| Standard-cell library | sky130_fd_sc_hd |
-| Clock period | |
-| Requested frequency | |
-| Mapped cells | |
-| Standard-cell area | |
-| Core dimensions | |
-| Core area | |
-| Die dimensions | |
-| Die area | |
-| Utilization | |
-| Total routed wirelength | |
-| Worst setup slack | |
-| Worst hold slack | |
-| Total negative setup slack | |
-| Power estimate | |
-| Worst IR drop | |
-```
+## 10. Explain the final layout
 
-### 4. Final signoff table
-
-```markdown
-| check | status |
-|-------|--------|
-| RTL simulation | |
-| Lint | |
-| Synthesis | |
-| Detailed routing | |
-| Routing DRC | |
-| Antenna | |
-| Magic DRC | |
-| KLayout DRC | |
-| LVS | |
-| Setup timing | |
-| Hold timing | |
-| XOR/stream comparison | |
-| IR-drop report | |
-```
-
-Never write `PASS` unless you actually inspected the report.
-
-### 5. Include the stage progression
-
-Your README should show or link to:
+Use your chronological screenshots to explain:
 
 ```text
 floorplan
-→ PDN
-→ placement
-→ CTS
-→ routing
-→ final GDS
+power grid
+placement
+clock tree
+routing
+final GDS
 ```
 
-For each image, write one sentence explaining what physically changed.
+Someone looking at the pictures should understand what changed from one stage to the next.
 
-### 6. Explain the critical path
+## 11. Explain what the final GDS actually contains
 
-Include:
+Your final GDS is a physical layout representation of the hardened block.
+
+It includes detailed geometry for the block and instantiated cells according to the flow's stream-out process.
+
+But it does **not** magically mean you possess a complete consumer chip.
+
+## 12. What remains before a real standalone tapeout?
+
+Depending on the fabrication program and integration strategy, additional work can include:
 
 ```text
-startpoint
-endpoint
-clock corner
-logic/network path
-worst slack
+chip-level integration
+pad ring or bump planning
+I/O cells
+ESD structures
+power/ground pads
+package planning
+clock/reset entry strategy
+analog interfaces if needed
+foundry/shuttle-specific rules
+waivers and signoff requirements
+final top-level DRC/LVS/timing/power-integrity checks
+manufacturing submission requirements
 ```
 
-Then explain whether the delay is dominated by:
+If the block is integrated into a wrapper such as a shuttle harness, the wrapper supplies some of these functions.
+
+The integration rules are program-specific.
+
+## 13. Hardened macro vs fabricated silicon
+
+Use precise language.
+
+These statements mean different things:
 
 ```text
-logic depth
-cell delay
-wire delay
-routing distance
-fanout
+“I wrote RTL.”
+“I synthesized the RTL.”
+“I completed place and route.”
+“I generated GDS.”
+“My block passed the listed open-source checks.”
+“My design was submitted for fabrication.”
+“My silicon was fabricated.”
+“My packaged silicon was electrically tested.”
 ```
 
-### 7. Explain your area
+Do not collapse them into one claim.
 
-Distinguish:
+## 14. Final README structure
 
-```text
-cell area
-core area
-die area
+A recommended final `README.md` outline is:
+
+```markdown
+# ASIC 101 — 8-bit ALU
+
+## What this project is
+
+## Architecture
+
+## RTL hierarchy
+
+## Verification
+
+## Open-source toolchain
+
+## PDK and standard-cell library
+
+## LibreLane configuration
+
+## Physical-design flow
+
+### Synthesis
+### Floorplan
+### PDN
+### Placement
+### CTS
+### Routing
+### Parasitics and STA
+### Signoff
+
+## Baseline PPA
+
+## Adder architecture experiment
+
+## Critical-path analysis
+
+## Physical verification summary
+
+## Visual progression
+
+## Reproduction instructions
+
+## Known issues / unresolved warnings
+
+## What remains before fabrication
 ```
 
-and explain why they are different.
+## 15. Reproduction instructions should be short and exact
 
-### 8. Explain your power result
+A new engineer should not need to reverse-engineer your environment from screenshots.
 
-State:
+At minimum, document something like:
 
-```text
-what report produced it
-what switching/activity assumptions were available
-whether the value is measured or estimated
+```bash
+# enter LibreLane environment
+nix-shell ~/librelane/shell.nix
+
+# run baseline
+cd ~/asic_101/asic
+librelane config.json
+
+# inspect final layout
+librelane --last-run --flow OpenInKLayout config.json
 ```
 
-For this project it is an estimate.
+Also document how to rerun the functional verification from Part 1.
 
-### 9. Explain what GDS contains
+## 16. Final concept check
 
-Your final GDS contains physical geometric structures for the hardened block.
+You are ready to finish ASIC 101 when you can answer all of these without guessing:
 
-You should be able to point out:
+1. What is RTL?
+2. What does a testbench do?
+3. What is synthesis?
+4. What is a standard cell?
+5. What is a PDK?
+6. What is the difference between die and core?
+7. What is placement?
+8. Why does a chip need a PDN?
+9. Why is the clock given special physical treatment?
+10. What is global vs detailed routing?
+11. What are parasitic resistance and capacitance?
+12. What does STA do?
+13. What is setup slack?
+14. What is hold timing?
+15. What is DRC?
+16. What is LVS?
+17. What is the difference between LEF and GDS?
+18. Why can two functionally identical adders have different PPA?
+19. Why is a generated GDS not automatically a tapeout-ready standalone chip?
+20. What evidence would you hand another engineer so they could reproduce your result?
 
-- die/block boundary
-- standard-cell rows
-- standard cells
-- PDN
-- clock network
-- signal routing
-- vias
-- filler structures
-- pins
+If you can explain those questions and show the corresponding evidence from your project, you have completed the intended ASIC 101 learning loop.
 
-### 10. Explain what still remains for a real chip
+## 17. Final completion checklist
 
-A real product/shuttle integration may still require:
+### Functional design
 
-- top-level SoC integration
-- hardened memory/analog macros
-- padframe
-- IO cells
-- ESD
-- package/bump/bond planning
-- full-chip power integrity
-- full-chip clock/reset planning
-- shuttle wrapper
-- density/fill requirements
-- foundry-specific signoff decks
-- final tapeout package review
+- [ ] RTL is committed and identifiable by Git revision
+- [ ] adder verification passes
+- [ ] ALU directed verification passes
+- [ ] exhaustive ALU regression passes
+- [ ] any architecture variants also pass the same tests
 
-The exact checklist depends on the fabrication program.
+### Reproducibility
 
-### 11. Write the final engineering conclusion
+- [ ] LibreLane version recorded
+- [ ] Yosys version recorded
+- [ ] OpenROAD version recorded
+- [ ] PDK recorded
+- [ ] standard-cell library recorded
+- [ ] exact configuration preserved
+- [ ] reproduction commands documented
 
-Answer:
+### Physical design
 
-1. What did you build?
-2. Which adder did you choose?
-3. What happened to it during synthesis?
-4. What limited performance?
-5. What determined area?
-6. Where did routing consume space?
-7. Did the design pass DRC and LVS?
-8. Did setup and hold timing pass?
-9. What would you optimize next?
-10. What is the next step between this macro and manufactured silicon?
+- [ ] technology-mapped standard-cell netlist inspected
+- [ ] floorplan inspected
+- [ ] PDN inspected
+- [ ] placement inspected
+- [ ] clock tree inspected
+- [ ] routing inspected
+- [ ] parasitics located
+- [ ] timing reports inspected
+- [ ] final GDS opened in KLayout
 
-### 12. Final concept check
+### Engineering analysis
 
-You should be able to explain the entire sentence below without hand-waving:
+- [ ] baseline PPA table complete
+- [ ] critical path documented
+- [ ] setup status documented
+- [ ] hold status documented
+- [ ] DRC status documented
+- [ ] LVS status documented
+- [ ] antenna status documented
+- [ ] unresolved warnings listed
+- [ ] architecture comparison completed fairly
 
-> The RTL was synthesized by Yosys into Sky130 standard cells, floorplanned and placed into a die/core geometry by OpenROAD, connected to a generated PDN, clock-buffered during CTS, routed with legal metal and vias, extracted into parasitic RC, analyzed with multi-corner STA and power/IR-drop estimation, physically checked with DRC/antenna/LVS-related signoff steps, and streamed into GDSII for physical integration or fabrication preparation.
+### Handoff
 
-## Results
+- [ ] file-format cheat sheet complete
+- [ ] stage screenshots organized chronologically
+- [ ] README explains the flow in your own words
+- [ ] claims distinguish estimates from measurements
+- [ ] claims distinguish hardened macro from fabricated silicon
+- [ ] known limitations are explicit
 
-You have completed an end-to-end introductory digital ASIC flow:
+## References
 
-```text
-RTL
-→ GATES
-→ FLOORPLAN
-→ PDN
-→ PLACEMENT
-→ CTS
-→ ROUTING
-→ EXTRACTION
-→ STA
-→ POWER
-→ DRC/LVS
-→ GDSII
-```
-
-The important result is not the colorful GDS screenshot.
-
-The important result is that you understand what changed at each stage, what each artifact means, and what evidence is required before claiming the design is physically correct.
-
-## Checklist
-
-- [ ] Repository is organized
-- [ ] Tool and PDK information recorded
-- [ ] PPA table complete
-- [ ] Signoff table complete
-- [ ] Stage screenshots complete
-- [ ] Critical path explained
-- [ ] Area explained
-- [ ] Power estimate explained
-- [ ] DRC checked
-- [ ] LVS checked
-- [ ] Setup checked
-- [ ] Hold checked
-- [ ] Final GDS inspected
-- [ ] Hardened macro vs complete chip distinction understood
-- [ ] Final engineering conclusion written
-- [ ] ASIC 101 RTL-to-GDS complete
-
----
-
-*Questions? Ask in the network Discord.*
+- LibreLane documentation: https://librelane.readthedocs.io/
+- OpenROAD documentation: https://openroad.readthedocs.io/
+- Yosys documentation: https://yosyshq.readthedocs.io/
+- SKY130 PDK documentation: https://skywater-pdk.readthedocs.io/
+- KLayout: https://www.klayout.de/
+- Magic: http://opencircuitdesign.com/magic/
+- Netgen: http://opencircuitdesign.com/netgen/

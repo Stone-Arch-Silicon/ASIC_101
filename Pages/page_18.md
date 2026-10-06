@@ -1,155 +1,209 @@
-# Clock tree synthesis: build the physical clock network
+# Page 18 — Clock tree synthesis: distribute time across the chip
 
-Clock Tree Synthesis, or CTS, turns the logical clock connection into a physical network designed to reach every sequential element with controlled delay and skew.
+## What you are learning
 
-## Overview
+Your RTL treats the clock almost like magic:
 
-Before CTS, the netlist conceptually says:
-
-```text
-clk → every flip-flop
+```verilog
+always @(posedge clk)
 ```
 
-A single ideal driver cannot physically drive a large chip.
+Every flip-flop appears to receive the same perfect clock edge.
 
-Real clock routing has:
+Real silicon cannot distribute a clock instantaneously.
 
-```text
-wire resistance
-wire capacitance
-sink capacitance
-buffer delay
-different path lengths
-```
+The clock is an electrical signal traveling through physical wires and buffers.
 
-CTS inserts a tree of clock buffers.
+**Clock Tree Synthesis (CTS)** builds that physical network.
+
+## 1. Why clocks are special
+
+The clock reaches many sequential elements.
+
+That means it can have enormous fanout in a larger design.
+
+A single tiny logic gate cannot directly drive thousands of clock pins with good edge quality.
+
+So the implementation creates a buffered clock network.
 
 Conceptually:
 
 ```text
-             clk
-              |
-          clock buffer
-          /          \
-      buffer        buffer
-      /   \          /   \
-    FF    FF       FF    FF
+                 clk
+                  |
+             root buffer
+             /         \
+        buffer         buffer
+       /     \         /    \
+     FF       FF      FF      FF
 ```
 
-### Clock latency
+Real trees are much more complicated.
 
-Clock latency is the time required for the clock edge to travel from its source to a sink.
+## 2. Clock latency
 
-### Clock skew
+**Clock latency** is the time from the clock source/reference to when the clock edge reaches a sink.
 
-Clock skew is the difference in clock arrival time between sinks.
-
-If:
+For one sink:
 
 ```text
-FF_A clock arrives at 1.0 ns
-FF_B clock arrives at 1.2 ns
+clock source
+    ↓
+clock buffers + wires
+    ↓
+flip-flop clock pin
 ```
 
-then the difference is:
+The traversal takes time.
+
+## 3. Clock skew
+
+If two flip-flops receive the same nominal clock edge at different times, the difference is **clock skew**.
+
+Example:
 
 ```text
-0.2 ns
+FF1 clock arrives at 2.10 ns
+FF2 clock arrives at 2.24 ns
+
+skew = 0.14 ns
 ```
 
-Skew affects setup and hold timing.
+The sign and effect depend on the timing relationship being analyzed.
 
-### Why clocks receive special treatment
+The key idea is that clocks are not physically simultaneous everywhere.
 
-The clock controls when state changes.
+## 4. Why skew matters
 
-Clock quality affects essentially every register-to-register timing path in the block.
+Timing checks compare data arrival with the clock edges that launch and capture that data.
 
-## Prerequisites
+Clock arrival differences therefore change the timing budget.
 
-- [placement](page_17.md)
-
-## Steps
-
-### 1. Find the CTS step
-
-```bash
-RUN=$(ls -dt runs/* | head -1)
-
-CTS_DIR=$(find "$RUN" -maxdepth 1 -type d \
-  -name '*openroad-cts*' | head -1)
-
-echo "$CTS_DIR"
-```
-
-### 2. Open the post-CTS design
-
-```bash
-librelane \
-  --with-initial-state "$CTS_DIR/state_out.json" \
-  --flow OpenInOpenROAD \
-  "$RUN/resolved.json"
-```
-
-### 3. Highlight the clock net
-
-Use OpenROAD's GUI to select or search for:
+Poor clock distribution can create or worsen:
 
 ```text
-clk
+setup problems
+hold problems
 ```
 
-Trace the network.
+## 5. Setup intuition
 
-Look for clock buffers added by CTS.
-
-### 4. Compare pre-CTS and post-CTS cell counts
-
-Compare an earlier placement state with the CTS state.
-
-CTS normally increases the number of cells because it inserts clock-tree elements.
-
-### 5. Find clock reports
-
-Search the CTS and later STA directories:
-
-```bash
-grep -RniE "skew|latency|clock" "$CTS_DIR" | head -100
-```
-
-Later multi-corner STA reports may provide more complete clock information.
-
-### 6. Understand insertion delay
-
-The clock at a register is not an ideal zero-delay event.
-
-The tree contributes real delay.
-
-This is why post-CTS timing is more physically realistic than pre-CTS timing.
-
-### 7. Setup intuition
-
-For a simplified register-to-register path:
+For a simple register-to-register path:
 
 ```text
 launch FF
-→ combinational logic
-→ capture FF
+   ↓
+combinational logic
+   ↓
+capture FF
 ```
 
-the data must arrive early enough before the capture clock edge.
+The data must arrive early enough before the capture edge to satisfy the capture register's setup requirement.
 
-A setup violation means the data path is too slow for the required cycle after accounting for clock timing and constraints.
+A simplified mental model is:
 
-### 8. Hold intuition
+```text
+available cycle time
+>
+clock-to-Q + data-path delay + setup requirement
+```
 
-Data must not change too soon after the capture clock edge.
+Clock skew and uncertainty modify the real equation.
 
-A hold violation is dangerous because simply lowering clock frequency does not automatically fix it.
+## 6. Hold intuition
 
-Hold is about **minimum delay**, not maximum cycle time.
+Hold asks a different question:
 
-### 9. Save evidence
+```text
+Does the new data change too soon after the capture clock edge?
+```
+
+Very short data paths can cause hold problems.
+
+This surprises many beginners because “faster logic” sounds universally good.
+
+It is not.
+
+A design can fail because a path is:
+
+```text
+too slow for setup
+```
+
+or:
+
+```text
+too fast for hold
+```
+
+## 7. Find the CTS stage
+
+Run:
+
+```bash
+cd ~/asic_101/asic
+RUN="$(ls -dt runs/*/ | head -1)"
+
+find "$RUN" -maxdepth 1 -mindepth 1 -type d -printf '%f\n' \
+  | grep -Ei 'cts|clock'
+```
+
+## 8. Inspect the clock network
+
+Open OpenROAD:
+
+```bash
+librelane --last-run --flow OpenInOpenROAD config.json
+```
+
+Try to select or highlight the `clk` net.
+
+Depending on the GUI and version, you may be able to trace the buffered clock tree visually.
+
+Look for repeated clock-buffer structures feeding sequential elements.
+
+## 9. Compare cell types before and after CTS
+
+Because CTS inserts clock buffers, the design's cell count can increase.
+
+This is a useful lesson:
+
+```text
+synthesis cell count ≠ final physical cell count
+```
+
+Physical implementation modifies the netlist for physical reasons.
+
+## 10. Why a balanced tree is not perfectly balanced
+
+Real geometry is irregular.
+
+Clock sinks are at different coordinates.
+
+Different branches have different:
+
+```text
+wire lengths
+loads
+buffer choices
+parasitics
+```
+
+CTS attempts to manage latency and skew, but zero skew everywhere is not a realistic expectation.
+
+## 11. Clock trees consume power
+
+The clock switches every cycle.
+
+That means its buffers and wires toggle continuously while the design is active.
+
+Clock networks can therefore represent a significant fraction of dynamic power in large synchronous chips.
+
+This is one reason clock gating exists in more advanced low-power design.
+
+ASIC 101 does not need to implement clock gating, but you should understand why clocks are expensive.
+
+## 12. Save CTS evidence
 
 Save:
 
@@ -157,31 +211,31 @@ Save:
 screenshots/clock_tree.png
 ```
 
-Try to make the highlighted clock network visible.
+Create:
 
-## Results
+```text
+reports/page18_cts_notes.md
+```
 
-Record:
+Answer:
 
-| CTS item | value/observation |
-|----------|------------------:|
-| Clock period | |
-| Clock buffers inserted | |
-| Reported skew | |
-| Clock latency/insertion delay | |
-| Post-CTS setup status | |
-| Post-CTS hold status | |
+1. Why can one source not simply drive every clock pin directly?
+2. What is clock latency?
+3. What is clock skew?
+4. What is the conceptual difference between setup and hold timing?
+5. Why can CTS increase both area and power?
 
-## Checklist
+## Checkpoint
 
-- [ ] Understand CTS
-- [ ] Understand clock latency
-- [ ] Understand clock skew
-- [ ] Can visually identify the clock network
-- [ ] Understand setup vs hold at a high level
-- [ ] Saved clock-tree screenshot
-- [ ] Continued to page 19
+- [ ] you know why CTS exists
+- [ ] you can define clock latency
+- [ ] you can define clock skew
+- [ ] you understand setup vs hold at an intuitive level
+- [ ] you found the CTS stage
+- [ ] you inspected the clock network
+- [ ] you saved CTS evidence
 
----
+## References
 
-*Questions? Ask in the network Discord.*
+- OpenROAD CTS documentation: https://openroad.readthedocs.io/
+- LibreLane timing-closure guide: https://librelane.readthedocs.io/en/stable/usage/timing_closure/
