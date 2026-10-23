@@ -6,7 +6,7 @@ const CONFIG = {
   repo: "https://github.com/Stone-Arch-Silicon/ASIC_101",
   mainSite: "https://stone-arch-silicon.github.io/stone-arch-silicon/",
   org:   "Stone Arch Silicon",
-  orgMark: "STONE ARCH SILICON",
+  orgMark: "Stone Arch Silicon",
   branch: "main",
   pagesDir: "Pages",
   maxPages: 60,
@@ -43,10 +43,17 @@ $id("f-repo").href = CONFIG.repo;
 
 /* drawer */
 (function(){
-  const body = document.body;
-  $id("drawer-btn").addEventListener("click", () => body.classList.toggle("drawer-open"));
-  $id("backdrop").addEventListener("click", () => body.classList.remove("drawer-open"));
-  pageNav.addEventListener("click", e => { if (e.target.closest("a")) body.classList.remove("drawer-open"); });
+  const body = document.body, button = $id("drawer-btn");
+  function setDrawer(open){
+    body.classList.toggle("drawer-open",open);
+    button.setAttribute("aria-expanded",String(open));
+  }
+  button.addEventListener("click", () => setDrawer(!body.classList.contains("drawer-open")));
+  $id("backdrop").addEventListener("click", () => setDrawer(false));
+  pageNav.addEventListener("click", e => { if(e.target.closest("a")) setDrawer(false); });
+  document.addEventListener("keydown", e => {
+    if(e.key === "Escape" && body.classList.contains("drawer-open")){setDrawer(false);button.focus();}
+  });
 })();
 
 /* =========================================================
@@ -330,7 +337,8 @@ function addVulkosWorkflow(p){
   if (![1,2,3,11,12,13].includes(p.n)) {
     panel.innerHTML += '<p>Use <code>src/</code> for the lesson’s <code>rtl/</code> files and <code>tb/</code> for <code>sim/</code>. Local command examples below are optional. Read the HDL and concepts; you do not need to install or launch desktop tools. Verification controls depend on project setup; ask a lead if unavailable.</p>';
   }
-  content.prepend(panel);
+  const heading = content.querySelector("h1");
+  if (heading) heading.after(panel); else content.prepend(panel);
   content.querySelectorAll('.codeblock').forEach(block => {
     const lang = block.querySelector('.lang')?.textContent.trim().toLowerCase();
     if (!['bash','sh','shell','tcl','yosys'].includes(lang)) return;
