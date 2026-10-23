@@ -212,7 +212,7 @@ footer .affiliation-note{max-width:var(--maxw);padding:20px clamp(18px,4vw,56px)
   .brand>span{display:block}
   .brand .sub{border:0;padding:0;font-size:9px;margin-top:3px}
   .links a{font-size:12px;padding:9px 10px}
-  #nav-repo{display:none}
+  #nav-main,#nav-repo{display:none}
   .layout{padding-bottom:44px}
   .md h1{font-size:2.2rem}
   .state-card{padding:18px}
