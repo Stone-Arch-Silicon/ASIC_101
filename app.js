@@ -295,10 +295,60 @@ function bindCopy(){
     });
   });
 }
+/* Default browser workflow; local CLI examples remain optional. */
+const VULKOS_GUIDE = {
+  "1": "Start in Vulkos with Page 2. The default course route uses a browser project, not a local EDA installation.",
+  "3": "Use the truth tables and exercises below to predict results before writing RTL. No tool installation is needed.",
+  "4": "Create src/logic_demo.v in the project explorer. Use editor diagnostics to fix syntax; run its self-checking testbench when introduced on Page 5.",
+  "5": "Create tb/logic_demo_tb.v. Configure verification for logic_demo and this testbench, run it, and save the PASS/mismatch output. Inspect waveforms if your project exposes them; a lead can supply a trace for the waveform exercise.",
+  "6": "Create the register module under src/ and its testbench under tb/. Run verification and trace clock/reset behavior. Save a short directed trace or signal table.",
+  "7": "Create src/adder8.v and the corresponding testbench under tb/. Run the exhaustive adder test and preserve the result. Fix failures before building the ALU.",
+  "8": "Create src/alu_core.v and src/alu_top.v. Include src/adder8.v in the design sources. Check the hierarchy and wrapper latency before running the complete testbench.",
+  "9": "Run the exhaustive ALU testbench against alu_core: all 524,288 combinations. Run a separate directed test for the registered wrapper. Preserve the exact test output, not just a successful physical build.",
+  "10": "Use Vulkos synthesis results and the schematic viewer to study the mapped logic after the first physical run on Page 13. The standalone generic Yosys-script exercise below is optional; distinguish generic gates from SKY130-mapped cells.",
+  "11": "Read the file-format and PDK concepts below. Vulkos manages the hosted process files; you still record the PDK, library and constraints for your run.",
+  "14": "Open your baseline run in Analysis. Read synthesis statistics and the schematic viewer. Inspect the mapped netlist if it is offered as an output; otherwise record that artifact as unavailable and ask a lead for a reference.",
+  "15": "Use the baseline configuration to calculate die/core dimensions. Inspect the available layout and floorplan-stage logs. An intermediate floorplan view requires an exposed artifact or a lead-provided reference; final GDS is not an intermediate floorplan screenshot.",
+  "16": "Inspect power-grid information in the available logs and layout. Identify supply/ground structures only when the layers or report support that identification. Desktop PDN inspection commands below are optional.",
+  "17": "Read placement-stage logs and available utilization/area metrics. Use the layout for physical context. Record unavailable placement/congestion views rather than treating final routed GDS as a placement-only view.",
+  "18": "Read CTS-stage logs and the timing analysis for the registered alu_top clock. Explain launch/capture registers and skew. Use detailed clock reports only if exposed; desktop clock-tree inspection is optional.",
+  "19": "Inspect routing-stage logs and the final GDS viewer. Relate metal/vias to the routing concepts below and preserve the actual routing/signoff status.",
+  "20": "Open Analysis timing for the same completed run. Record setup/hold results, clock period, analysis corner and available critical-path detail. Record missing SPEF or detailed path exports as unavailable.",
+  "21": "Record power, timing and area from the same run. Include units, clock constraint, corner and activity assumptions when exposed. These are tool estimates, not measured silicon.",
+  "22": "Read the run signoff results and logs. Record DRC/LVS status, antenna results if available, and every unresolved or unrun check. Build success alone does not establish all checks passed.",
+  "23": "Inventory the run outputs the platform actually exposes. Save available GDS, netlist, reports and metadata. Intermediate ODB/DEF inspection is optional when those artifacts are unavailable in the hosted workspace.",
+  "24": "Compare one adder implementation at a time. Preserve the same top module, testbench, process, library, clock and floorplan. Re-run verification before each physical variant, then compare saved runs and available metrics.",
+  "25": "Archive exact source and config, verification output, run identifiers, available environment metadata, metrics, signoff status and layout evidence. Explain how to reproduce the hosted run and list artifacts the platform did not expose."
+};
+function addVulkosWorkflow(p){
+  const panel = document.createElement('aside');
+  panel.className = 'state-card';
+  panel.setAttribute('aria-label', 'Vulkos browser workflow');
+  panel.innerHTML = '<strong>Browser lab · Vulkos</strong><p>'
+    + escHtml(VULKOS_GUIDE[p.n] || 'Follow this lesson in your Vulkos project. No local EDA installation is required.')
+    + '</p><p><a href="https://www.vulkos.co.uk/" target="_blank" rel="noopener">Open Vulkos ↗</a> · <a href="#page_2">Browser setup</a> · <a href="#page_13">First ALU physical run</a></p>';
+  if (![1,2,3,11,12,13].includes(p.n)) {
+    panel.innerHTML += '<p>Use <code>src/</code> for the lesson’s <code>rtl/</code> files and <code>tb/</code> for <code>sim/</code>. Local command examples below are optional. Read the HDL and concepts; you do not need to install or launch desktop tools. Verification controls depend on project setup; ask a lead if unavailable.</p>';
+  }
+  content.prepend(panel);
+  content.querySelectorAll('.codeblock').forEach(block => {
+    const lang = block.querySelector('.lang')?.textContent.trim().toLowerCase();
+    if (!['bash','sh','shell','tcl','yosys'].includes(lang)) return;
+    const details = document.createElement('details');
+    details.className = 'local-workflow';
+    const summary = document.createElement('summary');
+    summary.textContent = 'Optional local / desktop command example';
+    details.appendChild(summary);
+    block.replaceWith(details);
+    details.appendChild(block);
+  });
+}
+
 function renderPage(k){
   const p = PAGES[k];
   resetSlugs();
   content.innerHTML = mdToHtml(p.src);
+  addVulkosWorkflow(p);
   document.title = p.title + " \u00b7 " + CONFIG.title;
   tbTitle.textContent = p.title;
   metaEl.style.display = "";
@@ -344,3 +394,4 @@ addEventListener("hashchange", () => {
     if (el && el.scrollIntoView) el.scrollIntoView();
   }
 })();
+   
