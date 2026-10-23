@@ -1,326 +1,60 @@
-# Page 2 — Set up the open-source lab
+# Page 2 — Start ASIC 101 in Vulkos
 
-## What you are learning
+## Your browser is the lab
 
-On this page you will install the tools used for the first half of ASIC 101 and create the project directory that every later page will use.
+Use [Vulkos](https://www.vulkos.co.uk/) for ASIC 101. You do not need to install Linux, WSL, OSS CAD Suite, Nix, or a PDK to start the browser track.
 
-## 1. The tools
+The design work stays the same: write RTL, test it, read synthesis and timing reports, and inspect a layout. Vulkos hosts the tools; you still make and explain the engineering decisions.
 
-We will use:
+## 1. Open a project
 
-| Tool | Purpose |
+1. Open Vulkos and sign in, or create your own account.
+2. From the dashboard, create a project called `ASIC 101`, or open the seeded example.
+3. Keep the example intact until you have completed the guided quickstart. Do not run a full physical build for every early Verilog exercise.
+
+Use the [official quickstart](https://www.vulkos.co.uk/docs/quickstart) if the interface differs from this guide.
+
+## 2. Know where files go
+
+| Vulkos location | What belongs there |
 | --- | --- |
-| Icarus Verilog | Compile and simulate Verilog |
-| `vvp` | Execute simulations compiled by Icarus |
-| GTKWave | View waveforms |
-| Yosys | Synthesize RTL |
-| Graphviz | Render Yosys schematics |
-| Git | Track your source code |
+| `src/` | Synthesizable Verilog modules |
+| `tb/` | Testbenches, excluded from physical-design sources |
+| `config.json` | Top module, source file list, clock and process settings |
+| Run history and Analysis | Build status, logs, reports, metrics and layout outputs |
 
-The easiest way to get the EDA tools together is **OSS CAD Suite**.
+Create files with the explorer's new-file control. The editor autosaves. In the older local examples, `rtl/` corresponds to `src/`, and `sim/` corresponds to `tb/`. Change file references accordingly; the Verilog itself is unchanged.
 
-OSS CAD Suite includes Yosys, Icarus Verilog, GTKWave, Verilator, formal tools, FPGA tools, and other open-source digital-design software.
+## 3. Follow the learning sequence
 
-## 2. Install OSS CAD Suite
+- Pages 3–4: logic and a first Verilog module.
+- Pages 5–6: a self-checking testbench and a register.
+- Pages 7–9: an adder, the complete ALU, and exhaustive verification.
+- Pages 10–11: synthesis, PDKs and standard cells.
+- Pages 12–13: the hosted environment and the first ALU physical run.
+- Pages 14–25: interpret each stage, compare architectures, and prepare a handoff.
 
-Go to the official release page:
+For each exercise, create the named design in `src/` and its testbench in `tb/`. Configure verification for that exercise's DUT and testbench. Do not mix unrelated testbench top modules in one simulation. The exact simulation controls depend on project setup; follow [Vulkos verification documentation](https://www.vulkos.co.uk/docs/ide/testbench), and ask a lead if your project has no verification action.
 
-https://github.com/YosysHQ/oss-cad-suite-build/releases/latest
+## 4. Keep an engineering record
 
-Download the archive matching your operating system.
+For each milestone, save the exact source and configuration, test result, date and available run identifier. Keep copies of important outputs outside the platform before its retention window expires. Record tool/PDK versions from the run when available; write `not exposed by platform` when unavailable rather than guessing.
 
-Typical choices are:
-
-```text
-linux-x64
-darwin-arm64
-windows-x64
-```
-
-If you are on Windows and are comfortable with WSL, the OSS CAD Suite maintainers recommend using the Linux build inside WSL for the best experience.
-
-Extract the archive somewhere you will keep it.
-
-For example, on Linux:
-
-```bash
-mkdir -p ~/tools
-cd ~/tools
-```
-
-Extract the downloaded archive so that you eventually have a directory similar to:
-
-```text
-~/tools/oss-cad-suite/
-```
-
-Activate it:
-
-```bash
-source ~/tools/oss-cad-suite/environment
-```
-
-You must do this in each new terminal unless you add the command to your shell startup file.
-
-### Optional: activate it automatically
-
-For Bash:
-
-```bash
-echo 'source ~/tools/oss-cad-suite/environment' >> ~/.bashrc
-source ~/.bashrc
-```
-
-If your installation is somewhere else, change the path.
-
-## 3. Install Git
-
-If Git is not already installed, use your operating system's package manager.
-
-Ubuntu/Debian:
-
-```bash
-sudo apt update
-sudo apt install -y git
-```
-
-Git is open-source and will be used to track your progress.
-
-## 4. Verify the EDA tools
-
-Run:
-
-```bash
-iverilog -V
-vvp -V
-yosys -V
-gtkwave --version
-dot -V
-```
-
-Version numbers will change over time.
-
-The important result is:
-
-```text
-each command exists and runs
-```
-
-If your terminal says:
-
-```text
-command not found
-```
-
-the OSS CAD Suite environment is probably not active.
-
-Run:
-
-```bash
-source ~/tools/oss-cad-suite/environment
-```
-
-again.
-
-## 5. Choose a text editor
-
-Use any editor you are comfortable with.
-
-Open-source choices include:
-
-```text
-VSCode
-VSCodium
-Neovim
-Vim
-Emacs
-Kate
-```
-
-The editor is not part of the EDA flow. It only edits text files.
-
-## 6. Create the project
-
-Run:
-
-```bash
-mkdir -p ~/asic_101
-cd ~/asic_101
-
-mkdir -p rtl
-mkdir -p sim
-mkdir -p scripts
-mkdir -p build
-mkdir -p reports
-mkdir -p screenshots
-```
-
-Your project should now look like:
-
-```text
-asic_101/
-├── rtl/
-├── sim/
-├── scripts/
-├── build/
-├── reports/
-└── screenshots/
-```
-
-The folders have different jobs.
-
-### `rtl/`
-
-Synthesizable hardware source code.
-
-### `sim/`
-
-Testbenches and simulation-only code.
-
-### `scripts/`
-
-Yosys and later EDA scripts.
-
-### `build/`
-
-Generated temporary output.
-
-### `reports/`
-
-Tool reports worth keeping.
-
-### `screenshots/`
-
-Visual evidence from waveforms and layout.
-
-## 7. Initialize Git
-
-Still inside `~/asic_101`:
-
-```bash
-git init
-```
-
-Create a `.gitignore`:
-
-```bash
-cat > .gitignore <<'EOF'
-build/
-*.vcd
-*.fst
-*.log
-EOF
-```
-
-Create a small README:
-
-```bash
-cat > README.md <<'EOF'
-# ASIC 101
-
-Open-source ASIC 101 project.
-
-Goal: design, verify, synthesize, and physically implement an 8-bit ALU.
-EOF
-```
-
-Commit the starting point:
-
-```bash
-git add .
-git commit -m "Start ASIC 101 project"
-```
-
-If Git asks you to configure your name or email, follow the commands it prints and repeat the commit.
-
-## 8. Learn four shell commands
-
-You only need a small amount of terminal knowledge to start.
-
-Show the current directory:
-
-```bash
-pwd
-```
-
-List files:
-
-```bash
-ls
-```
-
-Change directory:
-
-```bash
-cd rtl
-```
-
-Go back one directory:
-
-```bash
-cd ..
-```
-
-That is enough for the next several pages.
+Check your account's compute allowance before a physical run. This course does not require purchasing a plan; contact a lead if your allocation blocks the next step.
 
 ## Checkpoint
 
-Run:
+- [ ] I can open my Vulkos project and edit a file.
+- [ ] I know the difference between `src/` and `tb/`.
+- [ ] I know that verification comes before physical implementation.
+- [ ] I have somewhere to preserve source, results and screenshots.
 
-```bash
-cd ~/asic_101
-pwd
-ls
-iverilog -V
-yosys -V
-```
+## Optional local tools
 
-You should see your project directory and working tool versions.
-
-## Common problems
-
-### `iverilog: command not found`
-
-Activate OSS CAD Suite again:
-
-```bash
-source ~/tools/oss-cad-suite/environment
-```
-
-### GTKWave does not open from WSL
-
-On modern Windows systems with WSLg, Linux GUI applications normally work directly.
-
-If your environment does not support Linux GUI applications, you can still complete simulations from the terminal and open waveform files with a waveform viewer available on your host system.
-
-### Spaces in paths
-
-Avoid putting the toolchain or course project in paths with complicated spaces or special characters.
-
-A simple location such as:
-
-```text
-~/asic_101
-```
-
-avoids many beginner problems.
-
-## Before continuing
-
-Your system is ready when all of these are true:
-
-- [ ] `iverilog -V` works
-- [ ] `vvp -V` works
-- [ ] `yosys -V` works
-- [ ] `gtkwave --version` works
-- [ ] `dot -V` works
-- [ ] `~/asic_101` exists
-- [ ] the project contains `rtl`, `sim`, `scripts`, `build`, `reports`, and `screenshots`
-- [ ] Git is initialized
+Local tooling is an advanced alternative, not a prerequisite. The remaining lessons retain local command examples in expandable sections on the course site. Use the [OSS CAD Suite instructions](https://github.com/YosysHQ/oss-cad-suite-build) and [LibreLane installation guide](https://librelane.readthedocs.io/en/stable/installation/) if you deliberately choose that route. Do not run local installation commands for the Vulkos track.
 
 ## References
 
-- OSS CAD Suite: https://github.com/YosysHQ/oss-cad-suite-build
-- Icarus Verilog: https://steveicarus.github.io/iverilog/
-- GTKWave: https://gtkwave.github.io/gtkwave/
-- Yosys: https://yosyshq.readthedocs.io/
+- [Vulkos files and workspace](https://www.vulkos.co.uk/docs/ide/files)
+- [Vulkos testbench workflow](https://www.vulkos.co.uk/docs/ide/testbench)
+  
