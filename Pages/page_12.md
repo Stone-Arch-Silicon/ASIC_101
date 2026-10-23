@@ -1,289 +1,57 @@
-# Page 12 — Install LibreLane and prove the ASIC environment works
+# Page 12 — Check the hosted ASIC environment in Vulkos
 
 ## What you are learning
 
-Before running your own ALU through physical design, make sure the complete open-source ASIC environment works on your machine.
+Vulkos runs LibreLane on managed hardware. You do not install the tools or download a PDK locally for the default ASIC 101 route.
 
-LibreLane provides a reproducible environment containing compatible versions of the tools used by the default flow.
+Your job is to establish a known baseline before debugging your ALU.
 
-The goal of this page is:
+## 1. Complete the reference quickstart
 
-```text
-install
-→ enter environment
-→ run smoke test
-→ understand what was verified
-```
+Open the seeded example project and follow the [Vulkos quickstart](https://www.vulkos.co.uk/docs/quickstart). Review its design, testbench and configuration. Run its verification first, then use **Run** for the physical flow when compute is available.
 
-Do not start debugging your own design until the reference environment itself works.
+A successful example shows that this hosted project can complete the flow. It does not prove that your ALU is correct.
 
-## 1. Why not install every ASIC tool separately?
+If the reference run fails, save the run identifier, failing stage and first useful error. Ask a lead to help distinguish a service/configuration problem from an RTL error before spending more compute.
 
-You could separately install:
+## 2. Prepare your ALU project
 
-```text
-Yosys
-OpenROAD
-Magic
-KLayout
-Netgen
-OpenRCX
-PDK utilities
-```
+In your ASIC 101 project, create these source files from the work in Pages 7–9:
 
-but compatible version combinations matter.
+- `src/adder8.v`
+- `src/alu_core.v`
+- `src/alu_top.v`
 
-For beginners, that creates unnecessary failure modes.
+Keep self-checking testbenches in `tb/`. Include only synthesizable source files in the physical configuration. Remove the example counter from the physical file list when switching to the ALU.
 
-LibreLane's recommended Nix environment provides a matched, reproducible toolchain.
+If you use the repository's reference RTL, select exactly one `adder8` implementation. RCA, CLA and carry-select files all define the same module and must not be compiled together.
 
-## 2. Hardware requirements
+## 3. Confirm the intended environment
 
-LibreLane's current Linux documentation lists:
+For this introductory exercise, use `sky130A` with `sky130_fd_sc_hd`. Confirm these settings against the project's supported template. Record the actual library, process and tool versions shown in run metadata or logs. If a version is unavailable, record that limitation.
 
-```text
-minimum: 8 GiB RAM
-recommended: 16 GiB RAM
-```
+The open SKY130 exercise is separate from the club's TSMC 180 nm work. Use only the open course RTL and public process data in this workspace.
 
-A multicore machine is strongly preferred.
+## 4. Preserve a baseline
 
-Small designs such as this ALU are much lighter than large chips, but the environment itself still contains substantial EDA software and PDK data.
-
-## 3. Supported environment
-
-For the smoothest course experience, use a recent Ubuntu Linux environment.
-
-Windows students can use WSL2.
-
-LibreLane also supports recent macOS through Nix.
-
-These instructions show the Linux/WSL path.
-
-## 4. Install basic prerequisites
-
-Ubuntu/WSL:
-
-```bash
-sudo apt update
-sudo apt install -y git curl
-```
-
-## 5. Install Nix
-
-Do **not** use Ubuntu's `apt` package for Nix for this course.
-
-Follow LibreLane's official Nix installation documentation:
-
-https://librelane.readthedocs.io/en/stable/installation/nix_installation/
-
-The current LibreLane Linux instructions use the official Nix installer and configure the FOSSi binary cache.
-
-Because installation commands can change, copy the current command from the LibreLane documentation rather than preserving an old command in your notes forever.
-
-After Nix installs:
-
-```text
-close the terminal
-open a new terminal
-```
-
-This ensures the environment changes are loaded.
-
-## 6. Clone LibreLane
-
-Run:
-
-```bash
-cd ~
-git clone https://github.com/librelane/librelane
-```
-
-You should now have:
-
-```text
-~/librelane
-```
-
-## 7. Enter the LibreLane environment
-
-Run:
-
-```bash
-nix-shell ~/librelane/shell.nix
-```
-
-The first run may download several gigabytes of tools and dependencies.
-
-Once the shell is ready, commands such as:
-
-```text
-librelane
-yosys
-openroad
-klayout
-magic
-netgen
-```
-
-are provided by the environment.
-
-## 8. Run the smoke test
-
-Inside the Nix shell:
-
-```bash
-librelane --smoke-test
-```
-
-LibreLane's smoke test is specifically intended to confirm that the installation works.
-
-A successful smoke test is much more meaningful than checking only:
-
-```text
-does the executable launch?
-```
-
-It verifies that the flow can actually run a small design and access the required open PDK environment.
-
-## 9. Record tool versions
-
-Create:
-
-```text
-reports/asic_environment.txt
-```
-
-from the course project.
-
-You can capture basic environment information with commands such as:
-
-```bash
-{
-  echo "Date:"
-  date
-  echo
-
-  echo "LibreLane:"
-  librelane --version
-  echo
-
-  echo "Yosys:"
-  yosys -V
-  echo
-
-  echo "OpenROAD:"
-  openroad -version
-} > ~/asic_101/reports/asic_environment.txt
-```
-
-If a particular tool uses a slightly different version flag in your release, run:
-
-```bash
-toolname --help
-```
-
-and use the documented version option.
-
-The point is to make your run reproducible.
-
-## 10. Why version recording matters
-
-EDA results can change when tools change.
-
-Two people may use the same RTL but get somewhat different:
-
-```text
-cell counts
-timing
-placement
-routing
-warnings
-```
-
-if their tool versions differ.
-
-Recording the environment gives future readers context.
-
-## 11. Prepare the ASIC project area
-
-Inside the ASIC 101 project:
-
-```bash
-cd ~/asic_101
-mkdir -p asic
-```
-
-Your project should now look like:
-
-```text
-asic_101/
-├── rtl/
-│   ├── adder8.v
-│   ├── alu_core.v
-│   └── alu_top.v
-├── sim/
-├── scripts/
-├── asic/
-├── build/
-├── reports/
-└── screenshots/
-```
-
-Do not duplicate the RTL into another directory yet.
-
-Keeping one source of truth reduces the chance that you simulate one version and physically implement a different version.
-
-## 12. What comes next
-
-The next page should create the LibreLane configuration for:
-
-```text
-DESIGN_NAME       = alu_top
-CLOCK_PORT        = clk
-CLOCK_PERIOD      = 10 ns
-PDK               = sky130A
-STD_CELL_LIBRARY  = sky130_fd_sc_hd
-```
-
-and then run a baseline implementation.
-
-From there, the remainder of ASIC 101 should teach each physical stage separately:
-
-```text
-13 — Configure and run the first RTL-to-GDS flow
-14 — Read the synthesis result and standard-cell netlist
-15 — Floorplanning
-16 — Power distribution
-17 — Placement
-18 — Clock tree synthesis
-19 — Routing
-20 — Parasitics and static timing analysis
-21 — Power, performance, and area
-22 — DRC, LVS, antenna, and physical verification
-23 — Inspect all major ASIC file formats and intermediate states
-24 — Compare adder architectures under identical ASIC constraints
-25 — Final reproducibility and tapeout-readiness package
-```
-
-That preserves the strongest part of the existing curriculum—the stage-by-stage physical-design walkthrough—while making the front half genuinely accessible to someone starting from zero.
+Record the reference project/run, status, date and available environment metadata. Copy the exact ALU RTL and configuration into your project archive. Hosted run outputs have a retention window, so preserve important results before they expire.
 
 ## Checkpoint
 
-Do not move on until:
+- [ ] The reference example completes, or I have documented the blocking failure.
+- [ ] My ALU sources are under `src/`, with tests under `tb/`.
+- [ ] Only one `adder8` implementation is selected.
+- [ ] I know the actual PDK/library and have recorded available versions.
+- [ ] I can find run history, logs and Analysis.
 
-- [ ] Nix is installed using the current LibreLane instructions
-- [ ] `~/librelane` exists
-- [ ] `nix-shell ~/librelane/shell.nix` works
-- [ ] `librelane --smoke-test` succeeds
-- [ ] you saved basic tool versions
-- [ ] `~/asic_101/asic/` exists
-- [ ] your verified RTL from Pages 7–9 is still the same source you will implement
+Continue to [Page 13](page_13.md) for your ALU configuration and first physical run.
+
+## Optional desktop route
+
+A local smoke test, Nix setup and desktop OpenROAD/KLayout are not required for this track. Use the [official LibreLane installation documentation](https://librelane.readthedocs.io/en/stable/installation/) if you choose to reproduce the flow locally or inspect an artifact that the browser does not expose.
 
 ## References
 
-- LibreLane installation: https://librelane.readthedocs.io/en/stable/installation/
-- LibreLane Nix installation: https://librelane.readthedocs.io/en/stable/installation/nix_installation/
-- LibreLane newcomers tutorial: https://librelane.readthedocs.io/en/stable/getting_started/newcomers/
-- OpenROAD documentation: https://openroad.readthedocs.io/
-- SKY130 PDK documentation: https://skywater-pdk.readthedocs.io/
+- [Vulkos running LibreLane](https://www.vulkos.co.uk/docs/run/running)
+- [Vulkos run history](https://www.vulkos.co.uk/docs/projects/run-history)
+  
