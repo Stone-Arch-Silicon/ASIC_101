@@ -1,71 +1,73 @@
-# ASIC 101: from an 8-bit ALU to GDSII
+# ASIC 101: an 8-bit ALU from Verilog to GDS
 
-A hands-on Stone Arch Silicon course built around one design: an **8-bit ALU**. Write RTL, choose an adder architecture, verify the result, implement it on an FPGA, then take the design through an open-source ASIC flow.
+Stone Arch Silicon’s 25-lesson course now uses **[Vulkos](https://www.vulkos.co.uk/) as the default browser lab**. Write RTL, verify an ALU, run hosted LibreLane on SKY130, and interpret physical-design results without installing the EDA stack locally.
 
-**Status:** course material in development. The repository contains 25 lessons; completing the lessons produces a design and an evidence package, not a fabricated or measured chip.
+[Open the course](https://stone-arch-silicon.github.io/ASIC_101/#page_1) · [Start the browser lab](Pages/page_2.md) · [First ALU physical run](Pages/page_13.md)
 
-## Start here
+## Workflow
 
-1. Read [orientation and prerequisites](Pages/page_1.md).
-2. Follow the [project brief](Pages/page_2.md) and [ALU specification](Pages/page_3.md).
-3. Choose **one** adder: [ripple carry](Pages/page_4.md), [carry lookahead](Pages/page_5.md), or [carry select](Pages/page_6.md).
-4. Rejoin at [verification](Pages/page_7.md), then finish the FPGA track.
-5. Continue to the ASIC track at [RTL to GDSII](Pages/page_10.md).
+1. Create a Vulkos project; use `src/` for RTL, `tb/` for testbenches and root `config.json` for the physical flow.
+2. Work through the Verilog and self-checking verification lessons. The ALU core test exercises all 524,288 input combinations; verify the registered wrapper separately.
+3. Follow Pages 12–13 for a hosted reference baseline and your ALU build.
+4. Use logs, Analysis, run history and available viewers to interpret synthesis through signoff.
+5. Preserve exact source/configuration, test results, run IDs, reports and layout evidence before output retention expires.
 
-You should know basic Verilog modules, always blocks, and testbenches, and be comfortable with Git and a Linux shell (WSL is fine). The FPGA track uses Vivado and a selected AMD/Xilinx part; programming a physical board is not required. Follow lesson 11 for the ASIC environment.
+Check account compute availability before physical runs. The course does not require purchasing a plan; ask a lead if access or allocation blocks you. Simulation controls and artifact availability depend on project setup. This documentation migration has not yet been validated by a complete signed-in Vulkos ALU run.
 
 ## Course map
 
-| Stage | Lessons | What you produce |
-| --- | --- | --- |
-| Orientation | [1: What an ASIC is](Pages/page_1.md), [2: Project brief](Pages/page_2.md) | Project workspace and an understood specification |
-| RTL | [3: ALU](Pages/page_3.md), then one of [4: RCA](Pages/page_4.md), [5: CLA](Pages/page_5.md), [6: Carry select](Pages/page_6.md) | ALU RTL with a custom adder |
-| Verification | [7: Verify the complete ALU](Pages/page_7.md) | Self-checking testbench and simulation evidence |
-| FPGA implementation | [8: Synthesis and implementation](Pages/page_8.md), [9: Analysis and submission](Pages/page_9.md) | Timing, utilization, power estimates, and interpretation |
-| ASIC setup | [10: Flow overview](Pages/page_10.md), [11: Toolchain](Pages/page_11.md), [12: PDK](Pages/page_12.md), [13: Baseline run](Pages/page_13.md) | Recorded environment, constraints, and a baseline run |
-| Physical design | [14: Synthesis](Pages/page_14.md), [15: Floorplan](Pages/page_15.md), [16: Power](Pages/page_16.md), [17: Placement](Pages/page_17.md), [18: CTS](Pages/page_18.md), [19: Routing](Pages/page_19.md) | Intermediate physical views and stage reports |
-| Analysis and signoff | [20: Parasitics and STA](Pages/page_20.md), [21: PPA](Pages/page_21.md), [22: Physical checks](Pages/page_22.md), [23: Inspect the artifacts](Pages/page_23.md) | Evidence for timing, connectivity, and physical-rule checks |
-| Capstone | [24: Compare architectures](Pages/page_24.md), [25: Final submission](Pages/page_25.md) | Reproducible comparison and a documented handoff |
-
-## Completion milestones
-
-- **RTL:** the selected adder obeys the common interface; ADD and SUB use it.
-- **Verification:** capture the testbench result and failures, with the exact RTL revision. Lesson 7 covers all 524,288 combinations of the combinational ALU inputs.
-- **FPGA:** record the target part, constraints, utilization, timing, and power assumptions. FPGA estimates are not ASIC measurements.
-- **ASIC:** record the tool and PDK versions, configuration, reports, and final layout. State which checks passed and which remain unresolved.
-- **Handoff:** use lesson 25's submission checklist. A hardened block is not a completed tapeout or measured silicon.
-
-## Repository guide
-
-| Path | Purpose |
+| Lesson | Topic |
 | --- | --- |
-| [Pages/](Pages/) | Lesson Markdown and lesson images |
-| [files/](files/) | Supporting course files |
-| [Pages/TEMPLATE.md](Pages/TEMPLATE.md) | Starting point for lesson authors |
-| [app.js](app.js) | Course configuration, navigation, and Markdown renderer |
-| [index.html](index.html), [style.css](style.css) | Static course site |
+| 1 | [What are we actually building?](Pages/page_1.md) |
+| 2 | [Start ASIC 101 in Vulkos](Pages/page_2.md) |
+| 3 | [Bits, gates, binary numbers, and the two kinds of digital logic](Pages/page_3.md) |
+| 4 | [Your first Verilog hardware](Pages/page_4.md) |
+| 5 | [Simulation and testbenches from zero](Pages/page_5.md) |
+| 6 | [Registers, clocks, and sequential logic](Pages/page_6.md) |
+| 7 | [Build an 8-bit adder and learn subtraction](Pages/page_7.md) |
+| 8 | [Build the complete 8-bit ALU](Pages/page_8.md) |
+| 9 | [Verify the ALU properly](Pages/page_9.md) |
+| 10 | [Synthesis with Yosys](Pages/page_10.md) |
+| 11 | [From synthesized logic to real silicon: PDKs and standard cells](Pages/page_11.md) |
+| 12 | [Check the hosted ASIC environment in Vulkos](Pages/page_12.md) |
+| 13 | [Run your ALU from RTL to GDS in Vulkos](Pages/page_13.md) |
+| 14 | [Synthesis again, but now with real SKY130 standard cells](Pages/page_14.md) |
+| 15 | [Floorplanning: give the circuit a physical home](Pages/page_15.md) |
+| 16 | [Power distribution: VDD and ground are physical networks](Pages/page_16.md) |
+| 17 | [Placement: decide where every standard cell goes](Pages/page_17.md) |
+| 18 | [Clock tree synthesis: distribute time across the chip](Pages/page_18.md) |
+| 19 | [Routing: turn logical nets into legal metal and vias](Pages/page_19.md) |
+| 20 | [Parasitics and static timing analysis](Pages/page_20.md) |
+| 21 | [Power, performance, and area: read the implementation like an engineer](Pages/page_21.md) |
+| 22 | [Signoff checks: DRC, LVS, antenna, and “is this layout actually legal?”](Pages/page_22.md) |
+| 23 | [Learn the ASIC file formats and inspect the flow as a timeline](Pages/page_23.md) |
+| 24 | [Engineering experiment: compare three adder architectures fairly](Pages/page_24.md) |
+| 25 | [Final submission: reproducibility, engineering handoff, and tapeout readiness](Pages/page_25.md) |
 
-To preview the site, serve the repository root over HTTP:
+## Local tooling is optional
 
-```sh
-python3 -m http.server 8000
-```
+The course site labels and collapses local shell/Tcl/Yosys command examples. The older command walkthroughs remain for advanced reproduction. In the browser route, the older `rtl/` and `sim/` paths map to `src/` and `tb/`; update file references accordingly. Local commands use their original local paths.
 
-Open http://localhost:8000. No package installation or build step is needed for the static site. EDA setup is separate and is documented in the lessons.
+Vulkos does not necessarily expose every intermediate ODB/DEF, clock-tree or congestion view used in desktop OpenROAD exercises. Record unavailable outputs explicitly; use lead-provided reference artifacts or the optional desktop route for deeper inspection. Never label final GDS as an intermediate-stage screenshot.
 
-## Contributing
+## Completion evidence
 
-Choose a lesson or a reproducibility problem, make one focused change, and explain how you checked it. Preserve existing lesson filenames so inbound links keep working. Use relative links between lesson files and preview both GitHub Markdown and the course site.
+Preserve RTL and config, self-checking verification output, run status/date/identifier, actual PDK/library and available tool versions, timing/power/area assumptions and units, signoff outcomes, and layout screenshots. State unrun, failed and unavailable checks. A completed flow is not a fabricated chip or a complete tapeout qualification.
 
-When adding technical instructions, include prerequisites, commands, expected results, troubleshooting, and a completion checklist. Add an **Authors and reviewers** section with contributor-approved GitHub handles; do not assign authorship or review credit without their agreement.
+## Repository
 
-Near-term priorities: validate the course from a clean environment; record a reference ALU run; verify internal links and downloads; add lesson ownership and review dates; publish comparable RCA/CLA/carry-select results with identical constraints.
+`Pages/` contains the lessons. `files/alu/` contains reference RTL and optional advanced tooling; select only one `adder8` implementation. `app.js` renders the Markdown and supplies lesson-specific browser workflow guidance. `index.html` and `style.css` form the static site. No site build is required.
 
-## Related Stone Arch Silicon work
+For site contributors only, preview with `python3 -m http.server 8000`; students can use the published course directly.
 
-- [Club website and project directory](https://github.com/Stone-Arch-Silicon/stone-arch-silicon)
-- [ASIC documentation book](https://github.com/Stone-Arch-Silicon/ASIC-docs)
-- [Systolic matrix multiplier](https://github.com/Stone-Arch-Silicon/Mat_Mul_Systolic_Arrays)
-- [8-bit posit research documentation](https://github.com/Stone-Arch-Silicon/8-Bit_Posit)
+## Sources
 
-Course contributors are recorded in the [repository history](https://github.com/Stone-Arch-Silicon/ASIC_101/graphs/contributors).
+- [Vulkos quickstart](https://www.vulkos.co.uk/docs/quickstart)
+- [Files and workspace](https://www.vulkos.co.uk/docs/ide/files)
+- [Verification](https://www.vulkos.co.uk/docs/ide/testbench)
+- [Running LibreLane](https://www.vulkos.co.uk/docs/run/running)
+- [Analysis](https://www.vulkos.co.uk/docs/analysis/overview)
+- [Run history](https://www.vulkos.co.uk/docs/projects/run-history)
+
+Contributor credit remains in repository history. Preserve lesson URLs when editing; do not assign review credit without agreement.
+  
