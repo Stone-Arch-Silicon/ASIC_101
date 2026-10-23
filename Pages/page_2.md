@@ -25,6 +25,12 @@ Use the [official quickstart](https://www.vulkos.co.uk/docs/quickstart) if the i
 
 Create files with the explorer's new-file control. The editor autosaves. In the older local examples, `rtl/` corresponds to `src/`, and `sim/` corresponds to `tb/`. Change file references accordingly; the Verilog itself is unchanged.
 
+### What the workspace looks like
+
+![Vulkos example workspace showing the file explorer, Verilog editor and schematic panel](https://www.vulkos.co.uk/images/Landing/IDE.webp)
+
+*Official Vulkos example project. Explorer on the left, RTL editor in the center, analysis below. The pictured adder is a UI example; use the ASIC 101 sources for your lab.* [View full-size screenshot](https://www.vulkos.co.uk/images/Landing/IDE.webp) · [Source: Vulkos](https://www.vulkos.co.uk/)
+
 ## 3. Follow the learning sequence
 
 - Pages 3–4: logic and a first Verilog module.
