@@ -28,18 +28,6 @@ $id("nav-main").href = CONFIG.mainSite;
 $id("nav-repo").href = CONFIG.repo;
 $id("f-repo").href = CONFIG.repo;
 
-/* scroll progress */
-(function(){
-  const bar = $id("progress");
-  function upd(){
-    const h = document.documentElement;
-    const max = h.scrollHeight - h.clientHeight;
-    bar.style.transform = "scaleX(" + (max > 0 ? h.scrollTop / max : 0) + ")";
-  }
-  addEventListener("scroll", upd, { passive: true });
-  addEventListener("resize", upd);
-  upd();
-})();
 
 /* drawer */
 (function(){
