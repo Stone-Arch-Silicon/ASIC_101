@@ -72,6 +72,16 @@ Open the completed run's **Analysis** workspace. Inspect:
 
 Use the **GDS viewer** for layout and the schematic viewer for connectivity. A successful build or an attractive layout does not establish functional correctness or complete tapeout readiness.
 
+### Recognize the results screens
+
+![Vulkos LibreLane run analysis with timing metrics across process corners](https://www.vulkos.co.uk/images/Landing/Analysis.webp)
+
+*Timing analysis: select a stage on the left, then read its metrics across corners. Values shown belong to Vulkos's published example, not the course ALU.* [View full-size screenshot](https://www.vulkos.co.uk/images/Landing/Analysis.webp) · [Source: Vulkos](https://www.vulkos.co.uk/)
+
+![Vulkos GDS viewer showing an example adder layout and the layer visibility controls](https://www.vulkos.co.uk/images/Landing/GDS.webp)
+
+*GDS viewer: inspect the layout and toggle layers with the controls on the right. This is Vulkos's example adder; your ALU layout will differ.* [View full-size screenshot](https://www.vulkos.co.uk/images/Landing/GDS.webp) · [Source: Vulkos](https://www.vulkos.co.uk/)
+
 ## 6. Save your baseline evidence
 
 Preserve the exact RTL, `config.json`, verification log, run identifier/date, available environment versions, metrics and signoff results. Save layout screenshots and download important outputs offered by the platform before retention expires.
@@ -95,4 +105,4 @@ Continue to [Page 14](page_14.md) to interpret the synthesis result.
 - [Vulkos run workflow](https://www.vulkos.co.uk/docs/run/running)
 - [Vulkos Analysis](https://www.vulkos.co.uk/docs/analysis/overview)
 - [Vulkos layout viewer](https://www.vulkos.co.uk/docs/viewers/gds)
-            
+  
